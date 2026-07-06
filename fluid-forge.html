@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fluid Forge</title>
+<style>
+  :root{
+    --bg:#14161c; --panel:#1c1f27; --panel2:#22262f; --line:#2d323d;
+    --text:#e7e9ee; --sub:#8891a2; --accent:#5fd0ff; --accent2:#ff9a5f;
+    --danger:#ff6b6b; --good:#6bffa0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;}
+  #app{display:flex;height:100vh;overflow:hidden;}
+  #stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:20px;gap:14px;background:
+      radial-gradient(circle at 30% 20%, #1a1e27 0%, #101217 70%);
+    overflow:auto;}
+  #canvasWrap{position:relative;border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden;flex-shrink:0;
+    background-image:
+      linear-gradient(45deg,#242832 25%,transparent 25%),
+      linear-gradient(-45deg,#242832 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#242832 75%),
+      linear-gradient(-45deg,transparent 75%,#242832 75%);
+    background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0px;
+    background-color:#1a1c22;}
+  #simCanvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair;}
+  #topBar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+  button{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:8px 14px;border-radius:7px;cursor:pointer;font-size:13px;transition:.15s;}
+  button:hover{background:#2a2f3b;border-color:#3a4150;}
+  button.primary{background:linear-gradient(180deg,#2b6f8f,#1c4f66);border-color:#2b6f8f;color:#eafcff;}
+  button.primary:hover{filter:brightness(1.15);}
+  button.rec{background:linear-gradient(180deg,#8f2b2b,#661c1c);border-color:#8f2b2b;color:#fff0f0;}
+  button.rec.active{animation:pulse 1s infinite;}
+  button.warn{border-color:#8f6f2b;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,107,107,.5)}50%{box-shadow:0 0 0 7px rgba(255,107,107,0)}}
+  .preset{padding:9px 12px;font-size:12.5px;border-radius:8px;}
+  .preset.selected{border-color:var(--accent);color:var(--accent);background:#1b2a33;}
+  #sidebar{width:320px;min-width:320px;background:var(--panel);border-left:1px solid var(--line);
+    overflow-y:auto;padding:16px 16px 60px;}
+  #sidebar::-webkit-scrollbar{width:8px;}
+  #sidebar::-webkit-scrollbar-thumb{background:#333a46;border-radius:4px;}
+  h1{font-size:16px;margin:0 0 2px;letter-spacing:.5px;}
+  .tagline{font-size:11.5px;color:var(--sub);margin-bottom:16px;}
+  .section{margin-bottom:6px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel2);}
+  .section > .head{padding:9px 12px;font-size:12.5px;font-weight:600;letter-spacing:.3px;
+    color:var(--accent);cursor:pointer;display:flex;justify-content:space-between;align-items:center;
+    user-select:none;background:#1f232c;}
+  .section > .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px;}
+  .section.collapsed > .body{display:none;}
+  .row{display:flex;flex-direction:column;gap:3px;}
+  .row .lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--sub);}
+  .row .lbl b{color:var(--text);font-weight:500;}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  select, input[type=number]{background:#14161c;border:1px solid var(--line);color:var(--text);
+    border-radius:6px;padding:5px 7px;font-size:12px;width:100%;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+  .colorstop{display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .colorstop input[type=color]{width:36px;height:26px;padding:0;border:1px solid var(--line);
+    border-radius:5px;background:none;}
+  .colorstop span{font-size:9.5px;color:var(--sub);}
+  .checkline{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--sub);}
+  .small{font-size:11px;color:var(--sub);}
+  .statline{display:flex;justify-content:space-between;font-size:11.5px;color:var(--sub);}
+  .statline b{color:var(--good);}
+  hr.sep{border:none;border-top:1px solid var(--line);margin:2px 0;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="topBar">
+      <div class="btnrow" id="presetRow"></div>
+    </div>
+    <div id="canvasWrap"><canvas id="simCanvas"></canvas></div>
+    <div class="btnrow">
+      <button class="primary" id="btnPlay">⏸ Pause</button>
+      <button id="btnStep">⏭ Step</button>
+      <button id="btnReset">↺ Reset</button>
+      <button id="btnBurst" class="warn">💥 Trigger burst</button>
+      <button class="rec" id="btnRec">⏺ Record</button>
+    </div>
+    <div class="statline" style="width:520px;max-width:90vw;">
+      <span>Frames recorded: <b id="recCount">0</b></span>
+      <span id="fpsLabel">-- fps</span>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <h1>🌊 Fluid Forge</h1>
+    <div class="tagline">Fluid/pressure simulation for FX: smoke, fire, explosions, blood, magic, dust.</div>
+
+    <div class="section">
+      <div class="head">Simulation</div>
+      <div class="body">
+        <div class="row"><div class="lbl">Detail resolution <b id="lblRes"></b></div>
+          <select id="selRes">
+            <option value="32">32×32 (chunky pixels)</option>
+            <option value="48">48×48</option>
+            <option value="64" selected>64×64</option>
+            <option value="96">96×96</option>
+            <option value="128">128×128 (fine pixels)</option>
+          </select>
+        </div>
+        <div class="row"><div class="lbl">Effect area / world size <b id="lblWorld"></b></div>
+          <select id="selWorld">
+            <option value="1">1× (same as detail grid)</option>
+            <option value="4" selected>4× area — more room, less clipping</option>
+            <option value="5">5× area</option>
+            <option value="6">6× area</option>
+            <option value="8">8× area</option>
+            <option value="10">10× area — max headroom, may be slower</option>
+          </select>
+        </div>
+        <div class="row"><div class="lbl">Pixel size on screen <b id="lblDisp"></b></div>
+          <input type="range" id="rngDisp" min="4" max="16" step="1" value="8"></div>
+        <div class="row"><div class="lbl">Actual canvas size <b id="lblCanvasPx"></b></div></div>
+        <div class="row"><div class="lbl">Simulation speed <b id="lblSpeed"></b></div>
+          <input type="range" id="rngSpeed" min="10" max="300" step="5" value="100"></div>
+        <div class="row"><div class="lbl">Boundaries <b></b></div>
+          <select id="selBound"><option value="open">Open (fluid escapes)</option><option value="closed">Closed (walls)</option></select>
+        </div>
+        <div class="small">The effect (brush, burst) is sized relative to the detail resolution, not the world size — so a bigger world just adds empty room around it instead of shrinking or bloating it.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="head">Fluid physics</div>
+      <div class="body">
+        <div class="row"><div class="lbl">Viscosity <b id="lblVisc"></b></div>
+          <input type="range" id="rngVisc" min="0" max="60" step="1" value="2"></div>
+        <div class="row"><div class="lbl">Density diffusion <b id="lblDiff"></b></div>
+          <input type="range" id="rngDiff" min="0" max="60" step="1" value="4"></div>
+        <div class="row"><div class="lbl">Density decay <b id="lblDecay"></b></div>
+          <input type="range" id="rngDecay" min="0" max="100" step="1" value="12"></div>
+        <div class="row"><div class="lbl">Velocity damping <b id="lblVDamp"></b></div>
+          <input type="range" id="rngVDamp" min="0" max="100" step="1" value="6"></div>
+        <div class="row"><div class="lbl">Buoyancy (rise) <b id="lblBuoy"></b></div>
+          <input type="range" id="rngBuoy" min="-100" max="200" step="2" value="60"></div>
+        <div class="row"><div class="lbl">Gravity <b id="lblGrav"></b></div>
+          <input type="range" id="rngGrav" min="0" max="150" step="2" value="0"></div>
+        <div class="row"><div class="lbl">Vorticity (swirl) <b id="lblVort"></b></div>
+          <input type="range" id="rngVort" min="0" max="60" step="1" value="18"></div>
+        <div class="row"><div class="lbl">Pressure iterations <b id="lblIter"></b></div>
+          <input type="range" id="rngIter" min="4" max="40" step="1" value="16"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="head">Mouse brush</div>
+      <div class="body">
+        <div class="row"><div class="lbl">Size <b id="lblBSize"></b></div>
+          <input type="range" id="rngBSize" min="1" max="30" step="1" value="6"></div>
+        <div class="row"><div class="lbl">Density strength <b id="lblBDens"></b></div>
+          <input type="range" id="rngBDens" min="0" max="100" step="1" value="55"></div>
+        <div class="row"><div class="lbl">Velocity strength <b id="lblBVel"></b></div>
+          <input type="range" id="rngBVel" min="0" max="100" step="1" value="45"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="head">Color gradient (spawn color)</div>
+      <div class="body">
+        <div class="small">This gradient colors material as it's created (by the brush or a burst). Once created, that color travels with the fluid and won't change later — so different effects can coexist with their own colors on screen at the same time.</div>
+        <div class="grid4" id="colorStops"></div>
+        <label class="checkline"><input type="checkbox" id="chkLockColor" checked> Keep these colors when switching presets</label>
+        <div class="row"><div class="lbl">Alpha contrast <b id="lblAlpha"></b></div>
+          <input type="range" id="rngAlpha" min="20" max="300" step="5" value="100"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="head">Export</div>
+      <div class="body">
+        <div class="grid2">
+          <div class="row"><div class="lbl">Frame limit <b></b></div>
+            <input type="number" id="numMaxFrames" min="4" max="300" value="60"></div>
+          <div class="row"><div class="lbl">Capture every Nth <b></b></div>
+            <input type="number" id="numSkip" min="1" max="10" value="1"></div>
+        </div>
+        <div class="row"><div class="lbl">Sheet columns <b></b></div>
+          <input type="number" id="numCols" min="1" max="30" value="8"></div>
+        <label class="checkline"><input type="checkbox" id="chkTrim" checked> Trim to shared content area</label>
+        <hr class="sep">
+        <button class="primary" id="btnBuildSheet" style="width:100%">🧩 Build spritesheet from recorded frames</button>
+        <button id="btnSaveSheet" style="width:100%" disabled>💾 Save spritesheet PNG</button>
+        <button id="btnSaveZip" style="width:100%" disabled>💾 Save frames as ZIP</button>
+        <div class="small" id="exportInfo">No spritesheet built yet.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =================================================================================
+   FLUID SOLVER (Jos Stam style, semi-Lagrangian stable fluids)
+
+   Two separate notions of size, on purpose:
+   - `res`   = "detail resolution" chosen by the user (32..128). All effect sizing
+               (brush radius, burst radius) is expressed relative to `res`, so the
+               effect always feels the same size regardless of how big the world is.
+   - `GRIDN` = the actual simulated + rendered grid ( = res * sqrt(areaMult) ). Making
+               areaMult bigger gives the simulation more physical room around the
+               effect (more cells before hitting a wall / leaving the domain),
+               without changing how big or how detailed the effect itself looks.
+   ================================================================================= */
+let res = 64;          // detail resolution (effect scale reference)
+let areaMult = 4;      // world area multiplier (e.g. 4 = 4x the cell area of the detail grid)
+let GRIDN = Math.round(res*Math.sqrt(areaMult)); // actual simulated grid dimension
+let SZ = GRIDN+2;
+let vx, vy, vx0, vy0, dens, dens0, curl, pressureBuf, divBuf;
+let colR, colG, colB, colR0, colG0, colB0; // dye color, carried with the flow — baked in at spawn time
+
+function allocFields(){
+  GRIDN = Math.min(260, Math.round(res*Math.sqrt(areaMult))); // safety cap for performance
+  SZ = GRIDN+2;
+  const n = SZ*SZ;
+  vx = new Float32Array(n); vy = new Float32Array(n);
+  vx0 = new Float32Array(n); vy0 = new Float32Array(n);
+  dens = new Float32Array(n); dens0 = new Float32Array(n);
+  curl = new Float32Array(n); pressureBuf = new Float32Array(n); divBuf = new Float32Array(n);
+  colR = new Float32Array(n); colG = new Float32Array(n); colB = new Float32Array(n);
+  colR0 = new Float32Array(n); colG0 = new Float32Array(n); colB0 = new Float32Array(n);
+}
+function IX(x,y){ return x + y*SZ; }
+
+const params = {
+  boundary:'open', visc:0.00002, diff:0.00004, decay:0.12, vdamp:0.06,
+  buoy:0.60, grav:0.0, vort:18, iters:16, speed:1.0,
+  brushSize:6, brushDens:0.55, brushVel:0.45,
+  alphaPow:1.0
+};
+
+function set_bnd(b, x){
+  const n = GRIDN;
+  if(params.boundary === 'closed'){
+    for(let i=1;i<=n;i++){
+      x[IX(0,i)]   = (b===1)? -x[IX(1,i)] : x[IX(1,i)];
+      x[IX(n+1,i)] = (b===1)? -x[IX(n,i)] : x[IX(n,i)];
+      x[IX(i,0)]   = (b===2)? -x[IX(i,1)] : x[IX(i,1)];
+      x[IX(i,n+1)] = (b===2)? -x[IX(i,n)] : x[IX(i,n)];
+    }
+  } else {
+    for(let i=1;i<=n;i++){
+      x[IX(0,i)]   = x[IX(1,i)];
+      x[IX(n+1,i)] = x[IX(n,i)];
+      x[IX(i,0)]   = x[IX(i,1)];
+      x[IX(i,n+1)] = x[IX(i,n)];
+    }
+  }
+  x[IX(0,0)]     = 0.5*(x[IX(1,0)]+x[IX(0,1)]);
+  x[IX(0,n+1)]   = 0.5*(x[IX(1,n+1)]+x[IX(0,n)]);
+  x[IX(n+1,0)]   = 0.5*(x[IX(n,0)]+x[IX(n+1,1)]);
+  x[IX(n+1,n+1)] = 0.5*(x[IX(n,n+1)]+x[IX(n+1,n)]);
+}
+
+function lin_solve(b, x, x0, a, c, iter){
+  const n = GRIDN, cRecip = 1/c;
+  for(let k=0;k<iter;k++){
+    for(let j=1;j<=n;j++){
+      for(let i=1;i<=n;i++){
+        x[IX(i,j)] = (x0[IX(i,j)] + a*(x[IX(i-1,j)]+x[IX(i+1,j)]+x[IX(i,j-1)]+x[IX(i,j+1)])) * cRecip;
+      }
+    }
+    set_bnd(b,x);
+  }
+}
+function diffuse(b, x, x0, diff, dt, iter){
+  // scaled against `res` (not GRIDN) on purpose: motion/diffusion speed stays
+  // anchored to the chosen detail resolution, so a bigger world (GRIDN) is
+  // genuinely extra room rather than just proportionally rescaling everything
+  // back to feeling identical (which is what plain grid-size scaling would do).
+  const a = dt*diff*res*res;
+  lin_solve(b, x, x0, a, 1+4*a, iter);
+}
+function advect(b, d, d0, velX, velY, dt){
+  const n = GRIDN, dt0 = dt*res;
+  for(let j=1;j<=n;j++){
+    for(let i=1;i<=n;i++){
+      let x = i - dt0*velX[IX(i,j)];
+      let y = j - dt0*velY[IX(i,j)];
+      if(x<0.5) x=0.5; if(x>n+0.5) x=n+0.5;
+      if(y<0.5) y=0.5; if(y>n+0.5) y=n+0.5;
+      const i0=Math.floor(x), i1=i0+1, j0=Math.floor(y), j1=j0+1;
+      const s1=x-i0, s0=1-s1, t1=y-j0, t0=1-t1;
+      d[IX(i,j)] = s0*(t0*d0[IX(i0,j0)]+t1*d0[IX(i0,j1)]) + s1*(t0*d0[IX(i1,j0)]+t1*d0[IX(i1,j1)]);
+    }
+  }
+  set_bnd(b,d);
+}
+function project(velX, velY, p, div, iter){
+  const n = GRIDN, h = 1.0/res;
+  for(let j=1;j<=n;j++){
+    for(let i=1;i<=n;i++){
+      div[IX(i,j)] = -0.5*h*(velX[IX(i+1,j)]-velX[IX(i-1,j)] + velY[IX(i,j+1)]-velY[IX(i,j-1)]);
+      p[IX(i,j)] = 0;
+    }
+  }
+  set_bnd(0,div); set_bnd(0,p);
+  lin_solve(0,p,div,1,4,iter);
+  for(let j=1;j<=n;j++){
+    for(let i=1;i<=n;i++){
+      velX[IX(i,j)] -= 0.5*(p[IX(i+1,j)]-p[IX(i-1,j)])/h;
+      velY[IX(i,j)] -= 0.5*(p[IX(i,j+1)]-p[IX(i,j-1)])/h;
+    }
+  }
+  set_bnd(1,velX); set_bnd(2,velY);
+}
+function vorticityConfinement(dt){
+  const n = GRIDN, eps = params.vort;
+  if(eps<=0) return;
+  for(let j=1;j<=n;j++){
+    for(let i=1;i<=n;i++){
+      curl[IX(i,j)] = (vy[IX(i+1,j)]-vy[IX(i-1,j)]) - (vx[IX(i,j+1)]-vx[IX(i,j-1)]);
+    }
+  }
+  for(let j=1;j<=n;j++){
+    for(let i=1;i<=n;i++){
+      let dx = Math.abs(curl[IX(i+1,j)]) - Math.abs(curl[IX(i-1,j)]);
+      let dy = Math.abs(curl[IX(i,j+1)]) - Math.abs(curl[IX(i,j-1)]);
+      let len = Math.sqrt(dx*dx+dy*dy)+1e-5;
+      dx/=len; dy/=len;
+      const c = curl[IX(i,j)];
+      vx[IX(i,j)] += eps*dy*c*dt*0.02;
+      vy[IX(i,j)] -= eps*dx*c*dt*0.02;
+    }
+  }
+}
+function applyBuoyancyGravity(dt){
+  const n = GRIDN;
+  for(let j=1;j<=n;j++){
+    for(let i=1;i<=n;i++){
+      const d = dens[IX(i,j)];
+      vy[IX(i,j)] += dt*( -params.buoy*d*0.5 + params.grav*0.3 );
+    }
+  }
+}
+function dissipate(dt){
+  const decay = Math.max(0, 1 - params.decay*dt);
+  const vdamp = Math.max(0, 1 - params.vdamp*dt);
+  for(let i=0;i<dens.length;i++){
+    dens[i] *= decay;
+    colR[i] *= decay; colG[i] *= decay; colB[i] *= decay;
+    if(dens[i] < 0.0008){ dens[i] = 0; colR[i]=0; colG[i]=0; colB[i]=0; }
+    vx[i] *= vdamp; vy[i] *= vdamp;
+  }
+}
+function stepSim(dt){
+  applyBuoyancyGravity(dt);
+  vorticityConfinement(dt);
+
+  vx0.set(vx); vy0.set(vy);
+  diffuse(1, vx, vx0, params.visc, dt, params.iters);
+  diffuse(2, vy, vy0, params.visc, dt, params.iters);
+  project(vx, vy, pressureBuf, divBuf, params.iters);
+
+  vx0.set(vx); vy0.set(vy);
+  advect(1, vx, vx0, vx0, vy0, dt);
+  advect(2, vy, vy0, vx0, vy0, dt);
+  project(vx, vy, pressureBuf, divBuf, params.iters);
+
+  dens0.set(dens);
+  diffuse(0, dens, dens0, params.diff, dt, Math.max(4,Math.round(params.iters*0.6)));
+  dens0.set(dens);
+  advect(0, dens, dens0, vx, vy, dt);
+
+  const colIter = Math.max(4,Math.round(params.iters*0.5));
+  colR0.set(colR); diffuse(0, colR, colR0, params.diff, dt, colIter); colR0.set(colR); advect(0, colR, colR0, vx, vy, dt);
+  colG0.set(colG); diffuse(0, colG, colG0, params.diff, dt, colIter); colG0.set(colG); advect(0, colG, colG0, vx, vy, dt);
+  colB0.set(colB); diffuse(0, colB, colB0, params.diff, dt, colIter); colB0.set(colB); advect(0, colB, colB0, vx, vy, dt);
+
+  dissipate(dt);
+}
+function addDensityVel(px, py, radius, densAmt, velX, velY){
+  const n = GRIDN;
+  const r = Math.max(1,radius);
+  for(let jj=-r;jj<=r;jj++){
+    for(let ii=-r;ii<=r;ii++){
+      const xx = Math.round(px+ii), yy = Math.round(py+jj);
+      if(xx<1||xx>n||yy<1||yy>n) continue;
+      const dist = Math.hypot(ii,jj);
+      if(dist>r) continue;
+      const fall = Math.pow(1-dist/(r+0.001), 1.4);
+      const amt = densAmt*fall;
+      const idx = IX(xx,yy);
+      dens[idx] += amt;
+      if(amt>0){
+        const lutIdx = (Math.min(1,Math.max(0,fall))*255)|0;
+        colR[idx] += amt*gradLUT[lutIdx*3];
+        colG[idx] += amt*gradLUT[lutIdx*3+1];
+        colB[idx] += amt*gradLUT[lutIdx*3+2];
+      }
+      vx[idx] += velX*fall;
+      vy[idx] += velY*fall;
+    }
+  }
+}
+function burstAt(px, py, radius, strength){
+  const n = GRIDN, r = Math.max(2,radius);
+  for(let jj=-r;jj<=r;jj++){
+    for(let ii=-r;ii<=r;ii++){
+      const xx = Math.round(px+ii), yy = Math.round(py+jj);
+      if(xx<1||xx>n||yy<1||yy>n) continue;
+      const dist = Math.hypot(ii,jj);
+      if(dist>r || dist<0.001) continue;
+      const fall = Math.pow(1-dist/r, 1.2);
+      const idx = IX(xx,yy);
+      const amt = strength*fall*1.3;
+      dens[idx] += amt;
+      if(amt>0){
+        const lutIdx = (Math.min(1,Math.max(0,fall))*255)|0;
+        colR[idx] += amt*gradLUT[lutIdx*3];
+        colG[idx] += amt*gradLUT[lutIdx*3+1];
+        colB[idx] += amt*gradLUT[lutIdx*3+2];
+      }
+      vx[idx] += (ii/dist)*strength*fall*2.2;
+      vy[idx] += (jj/dist)*strength*fall*2.2;
+    }
+  }
+}
+
+/* ================= COLOR GRADIENT ================= */
+const colorStops = ['#0a0a0a', '#ff5a1f', '#ffd23f', '#ffffff'];
+function hexToRgb(h){
+  const v = parseInt(h.slice(1),16);
+  return [(v>>16)&255,(v>>8)&255,v&255];
+}
+let stopRgb = colorStops.map(hexToRgb);
+function rebuildStopRgb(){ stopRgb = colorStops.map(hexToRgb); }
+function sampleGradient(t){
+  t = Math.max(0, Math.min(1, t));
+  const segs = stopRgb.length-1;
+  const f = t*segs;
+  let idx = Math.floor(f);
+  if(idx>=segs) idx = segs-1;
+  const local = f-idx;
+  const a = stopRgb[idx], b = stopRgb[idx+1];
+  return [ a[0]+(b[0]-a[0])*local, a[1]+(b[1]-a[1])*local, a[2]+(b[2]-a[2])*local ];
+}
+let gradLUT = new Uint8ClampedArray(256*3);
+function rebuildLUT(){
+  for(let i=0;i<256;i++){
+    const c = sampleGradient(i/255);
+    gradLUT[i*3]=c[0]; gradLUT[i*3+1]=c[1]; gradLUT[i*3+2]=c[2];
+  }
+}
+rebuildLUT();
+
+/* ================= CANVAS / RENDER ================= */
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d', {willReadFrequently:true});
+let imgData;
+function setupCanvas(){
+  canvas.width = GRIDN; canvas.height = GRIDN;
+  imgData = ctx.createImageData(GRIDN,GRIDN);
+}
+function render(){
+  const data = imgData.data;
+  const n = GRIDN;
+  const alphaPow = params.alphaPow;
+  for(let j=1;j<=n;j++){
+    const rowOut = (j-1)*n;
+    for(let i=1;i<=n;i++){
+      const idx = IX(i,j);
+      const d = dens[idx];
+      const dc = d>1?1:d;
+      const o = (rowOut + (i-1))*4;
+      let r=0,g=0,b=0;
+      if(d>1e-6){
+        r = colR[idx]/d; g = colG[idx]/d; b = colB[idx]/d;
+        if(r<0)r=0; else if(r>255)r=255;
+        if(g<0)g=0; else if(g>255)g=255;
+        if(b<0)b=0; else if(b>255)b=255;
+      }
+      data[o]=r; data[o+1]=g; data[o+2]=b;
+      let a = Math.pow(dc, alphaPow);
+      data[o+3] = a*255;
+    }
+  }
+  ctx.putImageData(imgData,0,0);
+}
+
+/* ================= PRESETS ================= */
+const PRESETS = {
+  smoke: {
+    name:'Smoke', boundary:'open', visc:2, diff:6, decay:8, vdamp:5, buoy:70, grav:0, vort:14, iters:16,
+    brushSize:6, brushDens:45, brushVel:35, alphaPow:100,
+    colors:['#111111','#555a63','#b9c2cc','#ffffff']
+  },
+  fire: {
+    name:'Fire', boundary:'open', visc:1, diff:3, decay:16, vdamp:4, buoy:110, grav:0, vort:26, iters:18,
+    brushSize:5, brushDens:60, brushVel:40, alphaPow:80,
+    colors:['#1a0300','#b3220a','#ff8a1f','#fff4c2']
+  },
+  explosion: {
+    name:'Explosion', boundary:'open', visc:1, diff:5, decay:20, vdamp:10, buoy:20, grav:10, vort:35, iters:20,
+    brushSize:8, brushDens:70, brushVel:60, alphaPow:70,
+    colors:['#100800','#ff4400','#ffb020','#ffffff']
+  },
+  blood: {
+    name:'Blood', boundary:'closed', visc:4, diff:1, decay:2, vdamp:22, buoy:-10, grav:90, vort:6, iters:16,
+    brushSize:4, brushDens:80, brushVel:55, alphaPow:60,
+    colors:['#1a0000','#5c0009','#a4001c','#e0273f']
+  },
+  magic: {
+    name:'Magic', boundary:'open', visc:1, diff:2, decay:10, vdamp:5, buoy:10, grav:0, vort:40, iters:18,
+    brushSize:5, brushDens:55, brushVel:50, alphaPow:90,
+    colors:['#08002a','#5b1fb3','#c86bff','#eaf2ff']
+  },
+  dust: {
+    name:'Dust', boundary:'open', visc:6, diff:8, decay:5, vdamp:14, buoy:6, grav:35, vort:8, iters:14,
+    brushSize:9, brushDens:35, brushVel:30, alphaPow:110,
+    colors:['#1a1610','#6b5a3d','#c2a877','#efe2c4']
+  }
+};
+let currentPreset = 'fire';
+
+function applyPreset(key, doReset){
+  const p = PRESETS[key];
+  currentPreset = key;
+  params.boundary = p.boundary;
+  setSlider('selBound', p.boundary);
+  setSliderNum('rngVisc', p.visc); setSliderNum('rngDiff', p.diff);
+  setSliderNum('rngDecay', p.decay); setSliderNum('rngVDamp', p.vdamp);
+  setSliderNum('rngBuoy', p.buoy); setSliderNum('rngGrav', p.grav);
+  setSliderNum('rngVort', p.vort); setSliderNum('rngIter', p.iters);
+  setSliderNum('rngBSize', p.brushSize); setSliderNum('rngBDens', p.brushDens); setSliderNum('rngBVel', p.brushVel);
+  setSliderNum('rngAlpha', p.alphaPow);
+  const lockColor = document.getElementById('chkLockColor') && document.getElementById('chkLockColor').checked;
+  if(!lockColor){
+    p.colors.forEach((c,i)=>{ colorStops[i]=c; document.getElementById('cstop'+i).value=c; });
+    rebuildStopRgb(); rebuildLUT();
+  }
+  syncParamsFromUI();
+  document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('selected', b.dataset.key===key));
+  if(doReset) resetSim();
+}
+function setSlider(id,val){ document.getElementById(id).value = val; }
+function setSliderNum(id,val){ document.getElementById(id).value = val; }
+
+/* ================= UI WIRING ================= */
+function syncParamsFromUI(){
+  params.boundary = document.getElementById('selBound').value;
+  params.visc  = (+document.getElementById('rngVisc').value) * 0.00001;
+  params.diff  = (+document.getElementById('rngDiff').value) * 0.00001;
+  params.decay = (+document.getElementById('rngDecay').value) * 0.02;
+  params.vdamp = (+document.getElementById('rngVDamp').value) * 0.02;
+  params.buoy  = (+document.getElementById('rngBuoy').value) * 0.01;
+  params.grav  = (+document.getElementById('rngGrav').value) * 0.01;
+  params.vort  = (+document.getElementById('rngVort').value);
+  params.iters = (+document.getElementById('rngIter').value)|0;
+  params.speed = (+document.getElementById('rngSpeed').value) / 100;
+  params.brushSize = (+document.getElementById('rngBSize').value);
+  params.brushDens = (+document.getElementById('rngBDens').value)/100;
+  params.brushVel  = (+document.getElementById('rngBVel').value)/100;
+  params.alphaPow  = (+document.getElementById('rngAlpha').value)/100;
+
+  document.getElementById('lblRes').textContent = res+'×'+res;
+  document.getElementById('lblWorld').textContent = areaMult+'× area';
+  document.getElementById('lblSpeed').textContent = params.speed.toFixed(2)+'×';
+  document.getElementById('lblVisc').textContent = document.getElementById('rngVisc').value;
+  document.getElementById('lblDiff').textContent = document.getElementById('rngDiff').value;
+  document.getElementById('lblDecay').textContent = document.getElementById('rngDecay').value;
+  document.getElementById('lblVDamp').textContent = document.getElementById('rngVDamp').value;
+  document.getElementById('lblBuoy').textContent = document.getElementById('rngBuoy').value;
+  document.getElementById('lblGrav').textContent = document.getElementById('rngGrav').value;
+  document.getElementById('lblVort').textContent = document.getElementById('rngVort').value;
+  document.getElementById('lblIter').textContent = document.getElementById('rngIter').value;
+  document.getElementById('lblBSize').textContent = document.getElementById('rngBSize').value;
+  document.getElementById('lblBDens').textContent = document.getElementById('rngBDens').value;
+  document.getElementById('lblBVel').textContent = document.getElementById('rngBVel').value;
+  document.getElementById('lblAlpha').textContent = (params.alphaPow).toFixed(2)+'×';
+
+  const cellPx = +document.getElementById('rngDisp').value;
+  document.getElementById('lblDisp').textContent = cellPx+'px/cell';
+  const totalPx = cellPx*GRIDN;
+  document.getElementById('lblCanvasPx').textContent = totalPx+'×'+totalPx+'px ('+GRIDN+'×'+GRIDN+' cells)';
+  canvas.style.width = totalPx+'px';
+  canvas.style.height = totalPx+'px';
+}
+
+function buildPresetButtons(){
+  const row = document.getElementById('presetRow');
+  Object.keys(PRESETS).forEach(key=>{
+    const b = document.createElement('button');
+    b.className='preset'; b.dataset.key=key; b.textContent = PRESETS[key].name;
+    b.onclick = ()=>applyPreset(key, false);
+    row.appendChild(b);
+  });
+}
+function buildColorStops(){
+  const wrap = document.getElementById('colorStops');
+  wrap.innerHTML='';
+  colorStops.forEach((c,i)=>{
+    const div = document.createElement('div'); div.className='colorstop';
+    const inp = document.createElement('input'); inp.type='color'; inp.value=c; inp.id='cstop'+i;
+    inp.oninput = ()=>{ colorStops[i]=inp.value; rebuildStopRgb(); rebuildLUT(); };
+    const lab = document.createElement('span'); lab.textContent = (i===0?'low':(i===colorStops.length-1?'high':'')) ;
+    div.appendChild(inp); div.appendChild(lab);
+    wrap.appendChild(div);
+  });
+}
+
+document.querySelectorAll('.section > .head').forEach(h=>{
+  h.addEventListener('click', ()=> h.parentElement.classList.toggle('collapsed'));
+});
+
+function onGridSettingsChanged(){
+  res = +document.getElementById('selRes').value;
+  areaMult = +document.getElementById('selWorld').value;
+  allocFields(); setupCanvas(); syncParamsFromUI();
+  frames = []; updateExportState();
+}
+document.getElementById('selRes').addEventListener('change', onGridSettingsChanged);
+document.getElementById('selWorld').addEventListener('change', onGridSettingsChanged);
+
+['rngDisp','rngSpeed','selBound','rngVisc','rngDiff','rngDecay','rngVDamp','rngBuoy','rngGrav','rngVort','rngIter',
+ 'rngBSize','rngBDens','rngBVel','rngAlpha'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', syncParamsFromUI);
+});
+
+/* ================= MOUSE / BRUSH ================= */
+let isPointerDown = false;
+let lastGx=0, lastGy=0, haveLast=false;
+function clientToGrid(e){
+  const rect = canvas.getBoundingClientRect();
+  const gx = ((e.clientX-rect.left)/rect.width) * GRIDN + 1;
+  const gy = ((e.clientY-rect.top)/rect.height) * GRIDN + 1;
+  return [gx,gy];
+}
+canvas.addEventListener('pointerdown', e=>{
+  isPointerDown = true; haveLast=false;
+  canvas.setPointerCapture(e.pointerId);
+  const [gx,gy] = clientToGrid(e);
+  addDensityVel(gx,gy, params.brushSize*(res/64), params.brushDens*1.6, 0, 0);
+  lastGx=gx; lastGy=gy; haveLast=true;
+});
+canvas.addEventListener('pointermove', e=>{
+  if(!isPointerDown) return;
+  const [gx,gy] = clientToGrid(e);
+  let dx=0, dy=0;
+  if(haveLast){ dx = gx-lastGx; dy = gy-lastGy; }
+  addDensityVel(gx,gy, params.brushSize*(res/64), params.brushDens*1.2,
+    dx*params.brushVel*3, dy*params.brushVel*3);
+  lastGx=gx; lastGy=gy; haveLast=true;
+});
+window.addEventListener('pointerup', ()=>{ isPointerDown=false; haveLast=false; });
+
+function queueBurstAtCenter(){
+  burstAt(GRIDN/2, GRIDN/2, Math.max(4,res*0.18), 1.4);
+}
+document.getElementById('btnBurst').addEventListener('click', queueBurstAtCenter);
+
+/* ================= PLAYBACK LOOP ================= */
+let playing = true;
+let lastTime = performance.now();
+let fpsAcc=0, fpsCount=0, fpsShown=0;
+
+function resetSim(){
+  dens.fill(0); vx.fill(0); vy.fill(0); vx0.fill(0); vy0.fill(0);
+  colR.fill(0); colG.fill(0); colB.fill(0);
+  frames = []; updateExportState();
+}
+document.getElementById('btnReset').addEventListener('click', resetSim);
+
+document.getElementById('btnPlay').addEventListener('click', ()=>{
+  playing = !playing;
+  document.getElementById('btnPlay').textContent = playing ? '⏸ Pause' : '▶ Start';
+});
+document.getElementById('btnStep').addEventListener('click', ()=>{
+  const dt = (1/60)*params.speed;
+  stepSim(dt); render();
+  captureIfRecording();
+});
+
+function loop(now){
+  const dtReal = Math.min(0.05,(now-lastTime)/1000);
+  lastTime = now;
+  fpsAcc += dtReal; fpsCount++;
+  if(fpsAcc>0.5){ fpsShown = Math.round(fpsCount/fpsAcc); fpsAcc=0; fpsCount=0;
+    document.getElementById('fpsLabel').textContent = fpsShown+' fps'; }
+  if(playing){
+    const dt = (1/60)*params.speed;
+    stepSim(dt);
+    render();
+    captureIfRecording();
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ================= RECORDING / EXPORT ================= */
+let recording = false;
+let frames = []; // array of ImageData
+let frameTick = 0;
+
+function captureIfRecording(){
+  if(!recording) return;
+  const skip = Math.max(1, +document.getElementById('numSkip').value||1);
+  frameTick++;
+  if(frameTick % skip !== 0) return;
+  const maxF = Math.max(1, +document.getElementById('numMaxFrames').value||60);
+  if(frames.length >= maxF){
+    toggleRecording(false);
+    return;
+  }
+  const snap = ctx.getImageData(0,0,GRIDN,GRIDN);
+  frames.push(snap);
+  document.getElementById('recCount').textContent = frames.length;
+}
+function toggleRecording(force){
+  recording = (typeof force === 'boolean') ? force : !recording;
+  const b = document.getElementById('btnRec');
+  b.classList.toggle('active', recording);
+  b.textContent = recording ? '⏹ Stop recording' : '⏺ Record';
+  if(recording){ frames=[]; frameTick=0; document.getElementById('recCount').textContent=0; updateExportState(); }
+}
+document.getElementById('btnRec').addEventListener('click', ()=>toggleRecording());
+
+let builtSheet = null;
+function computeBoundingBox(){
+  let minX=GRIDN, minY=GRIDN, maxX=-1, maxY=-1;
+  for(const fr of frames){
+    const d = fr.data;
+    for(let y=0;y<GRIDN;y++){
+      for(let x=0;x<GRIDN;x++){
+        const a = d[(y*GRIDN+x)*4+3];
+        if(a>6){
+          if(x<minX)minX=x; if(x>maxX)maxX=x;
+          if(y<minY)minY=y; if(y>maxY)maxY=y;
+        }
+      }
+    }
+  }
+  if(maxX<0){ return {x:0,y:0,w:GRIDN,h:GRIDN}; }
+  return {x:minX, y:minY, w:(maxX-minX+1), h:(maxY-minY+1)};
+}
+function buildSpritesheet(){
+  if(frames.length===0){ document.getElementById('exportInfo').textContent='No frames recorded yet — record the simulation first.'; return; }
+  const trim = document.getElementById('chkTrim').checked;
+  const bbox = trim ? computeBoundingBox() : {x:0,y:0,w:GRIDN,h:GRIDN};
+  const cols = Math.max(1, Math.min(frames.length, +document.getElementById('numCols').value||8));
+  const rows = Math.ceil(frames.length/cols);
+  const fw = bbox.w, fh = bbox.h;
+  const sheet = document.createElement('canvas');
+  sheet.width = fw*cols; sheet.height = fh*rows;
+  const sctx = sheet.getContext('2d');
+  sctx.imageSmoothingEnabled = false;
+  const tmp = document.createElement('canvas'); tmp.width=GRIDN; tmp.height=GRIDN;
+  const tctx = tmp.getContext('2d');
+  frames.forEach((fr,idx)=>{
+    tctx.putImageData(fr,0,0);
+    const col = idx%cols, row = (idx/cols)|0;
+    sctx.drawImage(tmp, bbox.x, bbox.y, fw, fh, col*fw, row*fh, fw, fh);
+  });
+  builtSheet = {canvas:sheet, cols, rows, fw, fh, count:frames.length};
+  document.getElementById('exportInfo').textContent =
+    `Sheet: ${cols}×${rows}, frame ${fw}×${fh}px, ${frames.length} frames total.`;
+  document.getElementById('btnSaveSheet').disabled = false;
+  document.getElementById('btnSaveZip').disabled = false;
+}
+document.getElementById('btnBuildSheet').addEventListener('click', buildSpritesheet);
+
+document.getElementById('btnSaveSheet').addEventListener('click', ()=>{
+  if(!builtSheet) return;
+  builtSheet.canvas.toBlob(blob=>{
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `fluidforge_${currentPreset}_spritesheet.png`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  }, 'image/png');
+});
+
+/* ---- minimal store-only ZIP writer (no external deps) ---- */
+const CRC_TABLE = (function(){
+  const t = new Uint32Array(256);
+  for(let n=0;n<256;n++){
+    let c=n;
+    for(let k=0;k<8;k++) c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1);
+    t[n]=c>>>0;
+  }
+  return t;
+})();
+function crc32(buf){
+  let c = 0xFFFFFFFF;
+  for(let i=0;i<buf.length;i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function dosDateTime(){
+  const d = new Date();
+  const time = ((d.getHours()&31)<<11) | ((d.getMinutes()&63)<<5) | ((d.getSeconds()>>1)&31);
+  const date = (((d.getFullYear()-1980)&127)<<9) | (((d.getMonth()+1)&15)<<5) | (d.getDate()&31);
+  return {time,date};
+}
+function buildZip(fileEntries){
+  const {time,date} = dosDateTime();
+  const localParts = []; const centralParts = [];
+  let offset = 0;
+  for(const f of fileEntries){
+    const nameBytes = new TextEncoder().encode(f.name);
+    const crc = crc32(f.data);
+    const size = f.data.length;
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, time, true);
+    lv.setUint16(12, date, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    localParts.push(local, f.data);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, time, true);
+    cv.setUint16(14, date, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    central.set(nameBytes, 46);
+    centralParts.push(central);
+
+    offset += local.length + f.data.length;
+  }
+  const centralSize = centralParts.reduce((s,p)=>s+p.length,0);
+  const centralOffset = offset;
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4,0,true); ev.setUint16(6,0,true);
+  ev.setUint16(8, fileEntries.length, true);
+  ev.setUint16(10, fileEntries.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, centralOffset, true);
+  ev.setUint16(20, 0, true);
+
+  const totalLen = offset + centralSize + end.length;
+  const out = new Uint8Array(totalLen);
+  let p=0;
+  for(const part of localParts){ out.set(part,p); p+=part.length; }
+  for(const part of centralParts){ out.set(part,p); p+=part.length; }
+  out.set(end,p);
+  return out;
+}
+function canvasToPngBytes(cv){
+  return new Promise(resolve=>{
+    cv.toBlob(blob=>{
+      blob.arrayBuffer().then(buf=>resolve(new Uint8Array(buf)));
+    }, 'image/png');
+  });
+}
+document.getElementById('btnSaveZip').addEventListener('click', async ()=>{
+  if(!builtSheet || frames.length===0) return;
+  const trim = document.getElementById('chkTrim').checked;
+  const bbox = trim ? computeBoundingBox() : {x:0,y:0,w:GRIDN,h:GRIDN};
+  const tmp = document.createElement('canvas'); tmp.width=bbox.w; tmp.height=bbox.h;
+  const tctx = tmp.getContext('2d'); tctx.imageSmoothingEnabled=false;
+  const full = document.createElement('canvas'); full.width=GRIDN; full.height=GRIDN;
+  const fctx = full.getContext('2d');
+  const entries = [];
+  for(let i=0;i<frames.length;i++){
+    fctx.putImageData(frames[i],0,0);
+    tctx.clearRect(0,0,bbox.w,bbox.h);
+    tctx.drawImage(full, bbox.x, bbox.y, bbox.w, bbox.h, 0,0, bbox.w, bbox.h);
+    const bytes = await canvasToPngBytes(tmp);
+    entries.push({name:`frame_${String(i).padStart(3,'0')}.png`, data:bytes});
+  }
+  const zipBytes = buildZip(entries);
+  const blob = new Blob([zipBytes], {type:'application/zip'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `fluidforge_${currentPreset}_frames.zip`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+});
+
+function updateExportState(){
+  if(frames.length===0){
+    document.getElementById('btnSaveSheet').disabled = true;
+    document.getElementById('btnSaveZip').disabled = true;
+    builtSheet = null;
+  }
+}
+
+/* ================= INIT ================= */
+allocFields();
+setupCanvas();
+buildPresetButtons();
+buildColorStops();
+applyPreset('fire', false);
+syncParamsFromUI();
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
