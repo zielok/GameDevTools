@@ -102,3 +102,57 @@ A self-contained, browser-based tool for converting PNG animation frames into re
 - Single self-contained HTML file — no external libraries, no build step, no server required.
 
 
+# Fluid Forge
+
+A self-contained, single-file HTML tool for creating pixel-art fluid FX — smoke, fire, explosions, blood, magic, dust — and exporting them as spritesheets for game engines like Phaser or PixiJS.
+
+No build step, no dependencies, no server. Open `fluid-forge.html` in a browser and it works.
+
+## What it does
+
+Fluid Forge runs a real-time 2D fluid simulation (a from-scratch implementation of Jos Stam's *stable fluids* method — semi-Lagrangian advection, Jacobi pressure projection, vorticity confinement) and renders it straight to a low-resolution pixel grid, so the output already looks like retro pixel art instead of needing a separate downsampling pass.
+
+You paint into the simulation with the mouse, or trigger a preset burst, and once you're happy with a few seconds of animation you record it and export a trimmed spritesheet (or a ZIP of individual frames) ready to drop into a game project.
+
+## Features
+
+- **6 built-in presets**: Smoke, Fire, Explosion, Blood, Magic, Dust — each with its own physics (viscosity, buoyancy, gravity, vorticity, decay) and color gradient.
+- **Mouse brush** — paint density and velocity directly into the fluid. Adjustable size, density strength, and velocity strength.
+- **Burst trigger** — a one-shot radial impulse (density + outward velocity) for explosion-style effects, independent of the mouse.
+- **Persistent per-effect color** — color is baked into the material at the moment it's created (by the brush or a burst) and travels with the flow from then on. Switching presets or changing the gradient only affects *new* material, so a red explosion and a gray smoke cloud can coexist on screen without one repainting the other.
+- **Detail resolution vs. world size (two independent scales)**
+  - *Detail resolution* (32–128) controls how chunky or fine the pixels are, and is the reference scale for brush/burst sizing — so an effect always feels the same size no matter what it's set to.
+  - *Effect area / world size* (1×–10× area) controls how much actual room the simulation has around the effect, so plumes and blasts have space to develop before hitting a wall or the domain edge, instead of clipping. Increasing it doesn't change how big or how detailed things look — it just adds margin.
+- **Open or closed boundaries** — let fluid flow out of frame, or bounce off solid walls.
+- **Full manual color gradient editor** — 4 color stops plus an alpha-contrast curve, used to color freshly spawned material.
+- **Recording & export**
+  - Record N frames (with optional frame-skip) while the simulation plays.
+  - Build a spritesheet, auto-trimmed to the smallest bounding box shared by all recorded frames.
+  - Save the spritesheet as a PNG, or save every individual frame as a ZIP (uses a small hand-written, dependency-free ZIP writer — store method, no compression).
+- **Play / Pause / Step / Reset** playback controls. Pausing the simulation also pauses recording (no duplicate frames); Step lets you record one frame at a time while paused.
+
+## Using it
+
+1. Open `fluid-forge.html` in any modern browser (Chrome, Firefox, Edge, Safari).
+2. Pick a preset, or start tweaking sliders from scratch.
+3. Click/drag on the canvas to paint fluid, or hit **Trigger burst** for a one-shot blast.
+4. Adjust **Effect area / world size** if the effect is clipping against the edges of the canvas.
+5. When it looks good, hit **Record**, let it play (or step manually), then **Stop recording**.
+6. Click **Build spritesheet from recorded frames**, then **Save spritesheet PNG** (or **Save frames as ZIP**).
+
+Everything is saved manually via the buttons above — nothing downloads automatically.
+
+## Technical notes
+
+- Simulation and rendering both run on the same low-resolution grid (no separate "hi-res sim → downsample" step), which is what gives the chunky pixel-art look directly.
+- Color is stored as its own advected/diffused field (`colR`/`colG`/`colB`, weighted by density) alongside the density field, rather than being derived from density each frame. This is what makes colors persist per-effect instead of being globally repainted when you change presets.
+- The detail/world split works by anchoring the diffusion, advection, and pressure-projection scale factors to the *detail resolution* rather than the actual grid size (`GRIDN`). Left as plain grid-size scaling (the textbook Stam approach), a bigger grid doesn't actually buy you more room — movement speed scales up proportionally and the effect still reaches the edge at the same relative point. Anchoring to a fixed reference resolution breaks that proportionality on purpose, so a bigger world genuinely means more space before clipping.
+- Grid size is capped at 260×260 cells to keep things real-time in a single-threaded JS solver; very large combinations of detail resolution × world size will cost frame rate.
+
+## Browser support
+
+Needs `Canvas 2D`, `Pointer Events`, and `Blob`/`URL.createObjectURL` — all standard in current browsers. No external scripts are loaded; everything (including the ZIP writer) is inlined in the one file.
+
+## License
+
+Add your preferred license here.
