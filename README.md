@@ -101,8 +101,4 @@ A self-contained, browser-based tool for converting PNG animation frames into re
 - All color matching and quantization internally use OKLab vectors, even when a different color space is selected for matching mode. This is required because the relaxation quantizer's scoring formula depends on perceptual L/a/b decomposition — this is a deliberate design constraint, not an oversight.
 - Single self-contained HTML file — no external libraries, no build step, no server required.
 
-## License
 
-MIT
-License
-MIT
