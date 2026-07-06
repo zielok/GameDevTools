@@ -154,6 +154,3 @@ Everything is saved manually via the buttons above — nothing downloads automat
 
 Needs `Canvas 2D`, `Pointer Events`, and `Blob`/`URL.createObjectURL` — all standard in current browsers. No external scripts are loaded; everything (including the ZIP writer) is inlined in the one file.
 
-## License
-
-Add your preferred license here.
