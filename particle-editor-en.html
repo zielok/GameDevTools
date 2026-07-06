@@ -1,0 +1,3217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Particle Forge — Particle Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#0a0d12;
+  --panel:#12161d;
+  --panel-raised:#181d26;
+  --panel-hi:#1f2530;
+  --border:#232935;
+  --border-soft:#1a1f29;
+  --text:#e8ebf0;
+  --text-dim:#8590a3;
+  --text-faint:#4d5666;
+  --ember:#ff5c3d;
+  --ember-dim:#7a3225;
+  --plasma:#3ddbff;
+  --plasma-dim:#1d5a6b;
+  --magic:#b47bff;
+  --magic-dim:#5b3d8a;
+  --success:#4ade80;
+  --danger:#ff4d6d;
+  --radius:6px;
+  --font-ui:'Space Grotesk',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;background:var(--void);color:var(--text);font-family:var(--font-ui);overflow:hidden;}
+button{font-family:var(--font-ui);}
+input,select{font-family:var(--font-ui);}
+::selection{background:var(--ember);color:#000;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--panel-hi);border-radius:4px;}
+::-webkit-scrollbar-thumb:hover{background:var(--border);}
+
+#app{display:flex;flex-direction:column;height:100vh;width:100vw;}
+
+/* ---------- HEADER ---------- */
+#header{
+  height:52px;flex:0 0 auto;display:flex;align-items:center;gap:16px;
+  padding:0 16px;background:linear-gradient(180deg,var(--panel-raised),var(--panel));
+  border-bottom:1px solid var(--border);position:relative;z-index:20;
+}
+#logo{display:flex;align-items:center;gap:8px;}
+#logo svg{width:22px;height:22px;}
+#logo .name{font-weight:700;font-size:15px;letter-spacing:0.5px;}
+#logo .name span{color:var(--ember);}
+#logo .tag{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1.5px;margin-left:6px;padding-left:8px;border-left:1px solid var(--border);}
+.hdr-actions{display:flex;gap:6px;margin-left:8px;}
+.hdr-btn{
+  background:var(--panel-hi);border:1px solid var(--border);color:var(--text-dim);
+  padding:7px 12px;border-radius:var(--radius);font-size:12px;cursor:pointer;
+  display:flex;align-items:center;gap:6px;transition:all .12s;
+}
+.hdr-btn:hover{color:var(--text);border-color:var(--ember-dim);background:var(--panel-hi);}
+.hdr-btn.primary{background:var(--ember);color:#1a0a05;border-color:var(--ember);font-weight:600;}
+.hdr-btn.primary:hover{background:#ff7357;}
+.hdr-spacer{flex:1;}
+#playbar{display:flex;align-items:center;gap:10px;}
+#playToggle{
+  width:32px;height:32px;border-radius:50%;background:var(--panel-hi);border:1px solid var(--border);
+  color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+#playToggle:hover{border-color:var(--plasma-dim);}
+.stat{font-family:var(--font-mono);font-size:11px;color:var(--text-faint);}
+.stat b{color:var(--text-dim);font-weight:500;}
+
+/* ---------- BODY LAYOUT ---------- */
+#body{flex:1;display:flex;min-height:0;}
+#sidebar{
+  width:310px;flex:0 0 auto;background:var(--panel);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;min-height:0;
+}
+
+/* ---------- EMITTERS BAR ---------- */
+#emittersBar{
+  flex:0 0 auto;border-bottom:1px solid var(--border);padding:10px 10px 8px;
+  display:flex;flex-direction:column;gap:6px;background:var(--panel-raised);max-height:180px;
+}
+#emittersBarTitle{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-faint);display:flex;justify-content:space-between;align-items:center;}
+.bar-add-btn{
+  background:var(--panel-hi);border:1px solid var(--border);color:var(--plasma);width:20px;height:20px;
+  border-radius:5px;cursor:pointer;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;
+}
+.bar-add-btn:hover{border-color:var(--plasma);}
+#emittersList{display:flex;flex-direction:column;gap:5px;max-height:150px;overflow-y:auto;}
+.emchip{
+  display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;padding:5px 7px;cursor:pointer;transition:all .12s;
+}
+.emchip:hover{border-color:var(--border);background:var(--panel-hi);}
+.emchip.selected{border-color:var(--ember-dim);background:var(--panel-hi);box-shadow:0 0 0 1px rgba(255,92,61,0.25) inset;}
+.emchip-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+.emchip-name{flex:1;font-size:11.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.emchip-name-edit{
+  flex:1;font-size:11.5px;color:var(--text);background:var(--panel-raised);border:1px solid var(--plasma);
+  border-radius:3px;padding:1px 4px;font-family:var(--font-ui);min-width:0;
+}
+.emchip.selected .emchip-name{color:var(--text);}
+.emchip-enabled{accent-color:var(--ember);width:13px;height:13px;flex:0 0 auto;}
+.emchip-del{
+  background:transparent;border:none;color:var(--text-faint);font-size:14px;cursor:pointer;flex:0 0 auto;
+  width:18px;height:18px;line-height:1;border-radius:4px;
+}
+.emchip-del:hover{color:var(--danger);background:rgba(255,77,109,0.1);}
+.emchip-dup{
+  background:transparent;border:none;color:var(--text-faint);font-size:12px;cursor:pointer;flex:0 0 auto;
+  width:18px;height:18px;line-height:1;border-radius:4px;display:flex;align-items:center;justify-content:center;
+}
+.emchip-dup:hover{color:var(--plasma);background:rgba(61,219,255,0.1);}
+
+#tabs{display:flex;border-bottom:1px solid var(--border);}
+.tab-btn{
+  flex:1;background:transparent;border:none;color:var(--text-faint);padding:11px 4px;
+  font-size:10.5px;letter-spacing:0.3px;text-transform:uppercase;cursor:pointer;
+  border-bottom:2px solid transparent;transition:all .12s;
+}
+.tab-btn:hover{color:var(--text-dim);}
+.tab-btn.active{color:var(--ember);border-bottom-color:var(--ember);}
+#tab-content{flex:1;overflow-y:auto;padding:14px;}
+.panel{display:none;}
+.panel.active{display:block;}
+
+.section-title{
+  font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-faint);
+  margin:18px 0 10px;display:flex;align-items:center;gap:8px;
+}
+.section-title:first-child{margin-top:0;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border-soft);}
+
+.row{display:flex;gap:8px;margin-bottom:8px;}
+.row > *{flex:1;min-width:0;}
+
+.field{margin-bottom:8px;}
+.field-label{font-size:11px;color:var(--text-dim);margin-bottom:4px;display:block;}
+
+.numfield{
+  display:flex;align-items:center;background:var(--panel-raised);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden;height:30px;cursor:ew-resize;user-select:none;position:relative;
+}
+.numfield:hover{border-color:var(--plasma-dim);}
+.numfield.dragging{border-color:var(--plasma);}
+.numfield .nf-fill{position:absolute;left:0;top:0;bottom:0;background:rgba(61,219,255,0.08);pointer-events:none;}
+.numfield .nf-label{font-size:10px;color:var(--text-faint);padding:0 8px;white-space:nowrap;z-index:1;}
+.numfield .nf-val{
+  font-family:var(--font-mono);font-size:12px;color:var(--text);flex:1;text-align:right;
+  padding:0 8px;z-index:1;background:transparent;border:none;outline:none;width:100%;
+}
+.numfield .nf-unit{font-size:10px;color:var(--text-faint);padding-right:8px;z-index:1;}
+.numfield input.nf-edit{
+  font-family:var(--font-mono);font-size:12px;color:var(--ember);background:transparent;border:none;outline:none;
+  text-align:right;flex:1;padding:0 8px;width:100%;z-index:1;
+}
+
+select.sel{
+  width:100%;height:30px;background:var(--panel-raised);border:1px solid var(--border);color:var(--text);
+  border-radius:var(--radius);font-size:12px;padding:0 8px;cursor:pointer;
+}
+select.sel:hover{border-color:var(--plasma-dim);}
+
+.checkrow{display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:12px;color:var(--text-dim);}
+.checkrow input{accent-color:var(--ember);width:14px;height:14px;}
+
+.btn-sm{
+  background:var(--panel-hi);border:1px solid var(--border);color:var(--text-dim);padding:7px 10px;
+  border-radius:var(--radius);font-size:11px;cursor:pointer;width:100%;text-align:center;
+}
+.btn-sm:hover{color:var(--text);border-color:var(--plasma-dim);}
+
+.colorswatch{width:100%;height:30px;border-radius:var(--radius);border:1px solid var(--border);cursor:pointer;padding:0;}
+
+.hint{font-size:10.5px;color:var(--text-faint);line-height:1.5;margin-top:2px;}
+
+.subtle-box{background:var(--panel-raised);border:1px solid var(--border-soft);border-radius:var(--radius);padding:10px;margin-bottom:8px;}
+
+/* ---------- MAIN ---------- */
+#main{flex:1;display:flex;flex-direction:column;min-width:0;background:
+  radial-gradient(ellipse at 30% 20%, rgba(180,123,255,0.05), transparent 50%),
+  radial-gradient(ellipse at 70% 80%, rgba(61,219,255,0.05), transparent 50%),
+  var(--void);
+}
+#previewWrap{flex:1;display:flex;align-items:center;justify-content:center;padding:16px;min-height:0;position:relative;}
+#previewCanvas{
+  background:#05070a;border-radius:8px;border:1px solid var(--border);
+  max-width:100%;max-height:100%;box-shadow:0 0 0 1px rgba(255,255,255,0.02), 0 20px 60px rgba(0,0,0,0.5);
+  cursor:default;
+}
+#previewOverlayNote{
+  position:absolute;top:26px;left:26px;font-size:10px;color:var(--text-faint);
+  font-family:var(--font-mono);letter-spacing:0.5px;pointer-events:none;
+}
+.stage-resize-handle{
+  position:absolute;background:rgba(61,219,255,0.45);border-radius:4px;z-index:6;
+  transition:background .12s,transform .12s;touch-action:none;
+}
+.stage-resize-handle:hover{background:var(--plasma);}
+.stage-resize-handle.dragging{background:var(--ember);}
+.stage-resize-edge-r{cursor:ew-resize;}
+.stage-resize-edge-b{cursor:ns-resize;}
+.stage-resize-corner{cursor:nwse-resize;border-radius:5px;}
+#stageSizeLabel{
+  position:absolute;background:var(--panel-hi);border:1px solid var(--border);color:var(--text);
+  font-family:var(--font-mono);font-size:11px;padding:3px 8px;border-radius:5px;pointer-events:none;
+  display:none;z-index:7;white-space:nowrap;
+}
+#stageSizeLabel.show{display:block;}
+
+#bottomPanel{
+  flex:0 0 auto;height:270px;border-top:1px solid var(--border);background:var(--panel);
+  display:flex;flex-direction:column;
+}
+#bottomTabs{display:flex;border-bottom:1px solid var(--border);padding:0 8px;align-items:center;}
+.btab-btn{
+  background:transparent;border:none;color:var(--text-faint);padding:10px 16px;font-size:11.5px;
+  cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;letter-spacing:0.5px;
+}
+.btab-btn:hover{color:var(--text-dim);}
+.btab-btn.active{color:var(--plasma);border-bottom-color:var(--plasma);}
+#bottomTabsActiveLabel{margin-left:auto;font-size:11px;color:var(--text-faint);padding-right:6px;}
+#bottomTabsActiveLabel b{color:var(--ember);}
+#bottomContent{flex:1;min-height:0;overflow:hidden;position:relative;}
+.bpanel{display:none;height:100%;padding:14px 18px;overflow-y:auto;}
+.bpanel.active{display:flex;gap:16px;flex-wrap:wrap;align-content:flex-start;}
+
+.curve-wrap{display:flex;flex-direction:column;gap:8px;flex:1 1 200px;min-width:190px;}
+.curve-wrap .cw-title{font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;}
+.curve-wrap canvas{border-radius:6px;background:var(--panel-raised);border:1px solid var(--border);cursor:crosshair;width:100%;height:150px;}
+.curve-hint{font-size:10px;color:var(--text-faint);}
+
+.grad-wrap{display:flex;flex-direction:column;gap:10px;width:100%;}
+.grad-bar-outer{position:relative;height:60px;}
+#gradCanvas{width:100%;height:34px;border-radius:6px;border:1px solid var(--border);cursor:copy;}
+.grad-stops{position:relative;height:20px;margin-top:2px;}
+.grad-stop{
+  position:absolute;top:0;width:14px;height:14px;border-radius:3px;transform:translateX(-50%) rotate(45deg);
+  border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,0.4);cursor:pointer;
+}
+.grad-stop.selected{box-shadow:0 0 0 2px var(--plasma);}
+
+#timelineTrack{position:relative;flex:1;background:var(--panel-raised);border-radius:6px;border:1px solid var(--border);height:60px;margin-top:4px;cursor:pointer;}
+.tl-kf{
+  position:absolute;top:50%;width:14px;height:14px;transform:translate(-50%,-50%) rotate(45deg);
+  background:var(--magic);border:2px solid #0a0d12;cursor:grab;
+}
+.tl-kf.selected{background:var(--ember);}
+.tl-playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--plasma);pointer-events:none;}
+
+.kf-editor{width:230px;flex:0 0 auto;border-left:1px solid var(--border-soft);padding-left:18px;}
+
+/* ---------- MODAL ---------- */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(5,7,10,0.75);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;z-index:100;
+}
+.modal-bg.show{display:flex;}
+.modal{
+  width:460px;max-width:92vw;max-height:88vh;overflow-y:auto;background:var(--panel-raised);
+  border:1px solid var(--border);border-radius:10px;padding:22px;
+}
+.modal h2{margin:0 0 4px;font-size:16px;}
+.modal .sub{font-size:11.5px;color:var(--text-faint);margin-bottom:18px;}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
+
+.toggle-group{display:flex;gap:6px;background:var(--panel);padding:3px;border-radius:var(--radius);border:1px solid var(--border);}
+.toggle-opt{flex:1;text-align:center;padding:7px 4px;font-size:11px;border-radius:4px;cursor:pointer;color:var(--text-faint);}
+.toggle-opt.active{background:var(--panel-hi);color:var(--text);}
+
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--panel-hi);border:1px solid var(--border);color:var(--text);padding:10px 18px;
+  border-radius:8px;font-size:12.5px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;
+  box-shadow:0 10px 30px rgba(0,0,0,0.4);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+#autosaveBanner{
+  position:fixed;top:60px;left:50%;transform:translateX(-50%);background:var(--panel-hi);
+  border:1px solid var(--ember-dim);border-radius:8px;padding:10px 14px;display:none;
+  gap:12px;align-items:center;font-size:12px;z-index:150;box-shadow:0 10px 30px rgba(0,0,0,0.5);
+}
+#autosaveBanner.show{display:flex;}
+#autosaveBanner button{background:var(--panel);border:1px solid var(--border);color:var(--text);
+  padding:5px 10px;border-radius:5px;cursor:pointer;font-size:11px;}
+#autosaveBanner button.accept{background:var(--ember);color:#1a0a05;border-color:var(--ember);font-weight:600;}
+
+.file-input-hidden{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div id="logo">
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="2.3" fill="#ff5c3d"/>
+        <circle cx="5" cy="6" r="1.4" fill="#3ddbff"/>
+        <circle cx="19" cy="7" r="1.1" fill="#b47bff"/>
+        <circle cx="17" cy="18" r="1.6" fill="#3ddbff"/>
+        <circle cx="6" cy="17" r="1" fill="#ff5c3d"/>
+      </svg>
+      <div class="name">PARTICLE<span>FORGE</span></div>
+      <div class="tag">2D Editor</div>
+    </div>
+    <div class="hdr-actions">
+      <button class="hdr-btn" id="btnNew">New</button>
+      <button class="hdr-btn" id="btnSave">Save JSON</button>
+      <button class="hdr-btn" id="btnLoad">Load JSON</button>
+      <input type="file" id="loadInput" class="file-input-hidden" accept="application/json">
+      <button class="hdr-btn primary" id="btnExport">Export Spritesheet</button>
+      <select class="hdr-btn" id="presetSelect" style="cursor:pointer;">
+        <option value="">Effect presets…</option>
+        <option value="fire">🔥 Fire</option>
+        <option value="smoke">💨 Smoke</option>
+        <option value="magic">✨ Magic / Sparkles</option>
+        <option value="explosion">💥 Explosion</option>
+        <option value="rain">🌧️ Rain</option>
+        <option value="snow">❄️ Snow</option>
+        <option value="confetti">🎉 Confetti</option>
+        <option value="campfire">🏕️ Campfire (3 emitters)</option>
+        <option value="fireworks">🎆 Fireworks (sub-emitter)</option>
+        <option value="portal">🌀 Magic portal (attractor)</option>
+      </select>
+    </div>
+    <div class="hdr-spacer"></div>
+    <div id="playbar">
+      <span class="stat"><b id="statParticles">0</b> particles</span>
+      <span class="stat"><b id="statEmitters">1</b> emitters</span>
+      <span class="stat"><b id="statFps">60</b> fps</span>
+      <button id="playToggle" title="Play / Pause">
+        <svg id="iconPlay" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        <svg id="iconPause" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+      </button>
+      <button class="hdr-btn" id="btnReset">Reset</button>
+      <button class="hdr-btn" id="btnStageSize">Scene Size</button>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div id="body">
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+
+      <div id="emittersBar">
+        <div id="emittersBarTitle">
+          <span>Emitters in scene</span>
+          <button class="bar-add-btn" id="btnAddEmitter" title="Add emitter">+</button>
+        </div>
+        <div id="emittersList"></div>
+      </div>
+
+      <div id="tabs">
+        <button class="tab-btn active" data-tab="emitter">Emitter</button>
+        <button class="tab-btn" data-tab="physics">Physics</button>
+        <button class="tab-btn" data-tab="visuals">Visuals</button>
+        <button class="tab-btn" data-tab="forces">Forces</button>
+      </div>
+      <div id="tab-content">
+
+        <!-- EMITTER PANEL -->
+        <div class="panel active" id="panel-emitter">
+          <div class="section-title">Emitter shape</div>
+          <div class="field">
+            <select class="sel" id="em_shape">
+              <option value="point">Point</option>
+              <option value="line">Line</option>
+              <option value="circle">Circle</option>
+              <option value="rect">Rectangle</option>
+              <option value="custom">Custom shape (image)</option>
+            </select>
+          </div>
+          <div id="shapeParamsHost"></div>
+
+          <div class="section-title">Emission mode</div>
+          <div class="field">
+            <select class="sel" id="em_mode">
+              <option value="continuous">Continuous</option>
+              <option value="burst">Burst</option>
+            </select>
+          </div>
+          <div id="emitModeHost"></div>
+
+          <div class="section-title">Direction and spread</div>
+          <div class="row" id="em_angleSpreadHost"></div>
+          <label class="checkrow"><input type="checkbox" id="em_relativeAngle"> Direction relative to position (outward from center)</label>
+          <div class="hint" id="em_angleSpreadHint" style="margin-top:-4px;"></div>
+
+          <div class="section-title">Particle lifetime</div>
+          <div class="row" id="em_lifetimeHost"></div>
+
+          <div class="section-title">Emitter start time</div>
+          <div class="row" id="em_startDelayHost"></div>
+          <div class="hint" style="margin-top:-4px;">Delay in seconds before this emitter starts generating particles (e.g. 0 for the first emitter, 1 for a second one that should join a moment later).</div>
+
+          <div class="section-title">Sub-emitter (dependencies)</div>
+          <label class="checkrow"><input type="checkbox" id="se_enabled"> Enable sub-emitter</label>
+          <div id="subEmitterHost"></div>
+          <div class="hint">A sub-emitter spawns particles from another emitter in response to this emitter's events (e.g. particle death, or a trail during its life).</div>
+
+          <div id="targetedByHost"></div>
+        </div>
+
+        <!-- PHYSICS PANEL -->
+        <div class="panel" id="panel-physics">
+          <div class="section-title">Speed</div>
+          <div class="row" id="ph_speedHost"></div>
+          <div class="row" id="ph_accelHost"></div>
+
+          <div class="section-title">External forces</div>
+          <div class="hint" style="margin-bottom:8px;">Gravity</div>
+          <div class="row" id="ph_gravHost"></div>
+          <div class="hint" style="margin-bottom:8px;">Wind</div>
+          <div class="row" id="ph_windHost"></div>
+          <div class="hint" style="margin-bottom:8px;">Vortex effect (radial / tangential)</div>
+          <div class="row" id="ph_vortexHost"></div>
+
+          <div class="section-title">Noise / turbulence</div>
+          <label class="checkrow"><input type="checkbox" id="ph_noiseEnabled"> Enable noise field (Perlin/value noise)</label>
+          <div class="row" id="ph_noiseHost"></div>
+          <div class="hint">Adds organic, smooth micro-turbulence to particle motion (smoke, magic, fog).</div>
+
+          <div class="section-title">Collisions</div>
+          <label class="checkrow"><input type="checkbox" id="ph_collEnabled"> Enable floor collision</label>
+          <div class="row" id="ph_collHost"></div>
+        </div>
+
+        <!-- VISUALS PANEL -->
+        <div class="panel" id="panel-visuals">
+          <div class="section-title">Texture</div>
+          <div class="field">
+            <select class="sel" id="vs_texture">
+              <option value="dot">Dot (glow)</option>
+              <option value="star">Star (5-point)</option>
+              <option value="cross">Sparkle (4-point)</option>
+              <option value="ring">Ring</option>
+              <option value="smoke">Smoke (soft blob)</option>
+              <option value="square">Square (confetti)</option>
+              <option value="line">Line (streak)</option>
+              <option value="triangle">Triangle</option>
+              <option value="diamond">Diamond</option>
+              <option value="hexagon">Hexagon</option>
+              <option value="heart">Heart</option>
+              <option value="custom">Custom image</option>
+            </select>
+          </div>
+          <div id="vs_customTexHost"></div>
+          <div id="vs_animatedHost"></div>
+
+          <div class="section-title">Blend mode</div>
+          <div class="field">
+            <select class="sel" id="vs_blend">
+              <option value="lighter">Additive (fire / magic)</option>
+              <option value="source-over">Normal (smoke / objects)</option>
+              <option value="multiply">Multiply</option>
+            </select>
+          </div>
+
+          <div class="section-title">Base size (px)</div>
+          <div class="row" id="vs_sizeHost"></div>
+
+          <div class="section-title">Particle rotation</div>
+          <div class="row" id="vs_rotInitHost"></div>
+          <div class="row" id="vs_rotSpeedHost"></div>
+          <label class="checkrow"><input type="checkbox" id="vs_align"> Align to direction of motion</label>
+
+          <div class="section-title">Randomize start color</div>
+          <label class="checkrow"><input type="checkbox" id="vs_colorRandEnabled"> Randomize start color between two colors</label>
+          <div class="row" id="vs_colorRandHost"></div>
+          <div class="hint">Each particle gets a random starting color between A and B — the rest of the lifetime gradient (“Color” tab) stays unchanged.</div>
+        </div>
+
+        <!-- FORCES PANEL -->
+        <div class="panel" id="panel-forces">
+          <div class="section-title">Force fields (attractors / repulsors)</div>
+          <div class="hint" style="margin-bottom:10px;">Act globally on particles from all emitters. Drag the handle on the stage to change its position.</div>
+          <div id="forcesListHost" style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;"></div>
+          <button class="btn-sm" id="btnAddForce" style="margin-bottom:14px;">+ Add force field</button>
+          <div id="forceFieldsHost"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div id="main">
+      <div id="previewWrap">
+        <div id="previewOverlayNote">LIVE PREVIEW — gizmo shows the selected item</div>
+        <canvas id="previewCanvas" width="900" height="540"></canvas>
+        <div class="stage-resize-handle stage-resize-edge-r" id="stageHandleRight" title="Drag to change the scene width"></div>
+        <div class="stage-resize-handle stage-resize-edge-b" id="stageHandleBottom" title="Drag to change the scene height"></div>
+        <div class="stage-resize-handle stage-resize-corner" id="stageHandleCorner" title="Drag to change the scene size"></div>
+        <div id="stageSizeLabel"></div>
+      </div>
+
+      <div id="bottomPanel">
+        <div id="bottomTabs">
+          <button class="btab-btn active" data-btab="curves">Lifetime curves</button>
+          <button class="btab-btn" data-btab="gradient">Color (Gradient)</button>
+          <button class="btab-btn" data-btab="timeline">Emitter timeline</button>
+          <span id="bottomTabsActiveLabel">editing: <b id="bottomTabsEmName">Emitter 1</b></span>
+        </div>
+        <div id="bottomContent">
+          <div class="bpanel active" id="bpanel-curves">
+            <div class="curve-wrap">
+              <div class="cw-title"><span>Size</span><span class="curve-hint">double-click=add, right-click=delete</span></div>
+              <canvas id="curveSize"></canvas>
+            </div>
+            <div class="curve-wrap">
+              <div class="cw-title"><span>Alpha</span><span class="curve-hint">double-click=add, right-click=delete</span></div>
+              <canvas id="curveAlpha"></canvas>
+            </div>
+            <div class="curve-wrap">
+              <div class="cw-title"><span>Speed multiplier</span><span class="curve-hint">double-click=add, right-click=delete</span></div>
+              <canvas id="curveSpeed"></canvas>
+            </div>
+            <div class="curve-wrap">
+              <div class="cw-title"><span>Stretch X</span><span class="curve-hint">double-click=add, right-click=delete</span></div>
+              <canvas id="curveScaleX"></canvas>
+            </div>
+            <div class="curve-wrap">
+              <div class="cw-title"><span>Stretch Y</span><span class="curve-hint">double-click=add, right-click=delete</span></div>
+              <canvas id="curveScaleY"></canvas>
+            </div>
+          </div>
+
+          <div class="bpanel" id="bpanel-gradient">
+            <div class="grad-wrap">
+              <div class="cw-title"><span>Particle color gradient (0 → 1 of lifetime)</span><span class="curve-hint">double-click on the bar = add a stop</span></div>
+              <div class="grad-bar-outer">
+                <canvas id="gradCanvas" width="900" height="34"></canvas>
+                <div class="grad-stops" id="gradStops"></div>
+              </div>
+              <div class="row" style="max-width:320px;">
+                <div id="gradColorHost" style="flex:2"></div>
+                <button class="btn-sm" id="gradDeleteStop" style="flex:1;">Delete stop</button>
+              </div>
+              <div class="hint">If “Randomize start color” is enabled (Visuals tab), the first stop of this gradient is replaced with a random color for each particle.</div>
+            </div>
+          </div>
+
+          <div class="bpanel" id="bpanel-timeline" style="flex-direction:column;">
+            <div style="display:flex;gap:20px;flex:1;min-height:0;">
+              <div style="flex:1;display:flex;flex-direction:column;">
+                <div class="row" style="max-width:420px;">
+                  <div id="tl_durationHost"></div>
+                  <label class="checkrow" style="flex:1;"><input type="checkbox" id="tl_loop" checked> Loop emitter animation</label>
+                </div>
+                <div class="hint" style="margin-top:-4px;">On every loop repeat, emission (continuous or burst) restarts from scratch — even if the emitter's own interval (e.g. a burst every 4s) is longer than the loop duration.</div>
+                <div class="cw-title" style="margin-top:6px;"><span>Emitter position / rotation keyframes</span>
+                  <span class="curve-hint">click to select — drag to move in time</span></div>
+                <div id="timelineTrack"></div>
+                <div class="row" style="margin-top:10px;max-width:320px;">
+                  <button class="btn-sm" id="tl_addKf">+ Add keyframe</button>
+                  <button class="btn-sm" id="tl_delKf">Delete selected</button>
+                </div>
+                <div class="hint" style="margin-top:8px;">The emitter's timeline position is fully preserved during spritesheet export — the whole scene is rendered exactly as in the preview.</div>
+              </div>
+              <div class="kf-editor" id="kfEditorHost">
+                <div class="section-title">Selected keyframe</div>
+                <div id="kfFieldsHost"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-bg" id="confirmModal">
+  <div class="modal" style="width:360px;">
+    <h2 id="confirmModalTitle">Confirm</h2>
+    <div class="sub" id="confirmModalText" style="margin-bottom:0;"></div>
+    <div class="modal-foot">
+      <button class="hdr-btn" id="confirmModalCancel">Cancel</button>
+      <button class="hdr-btn primary" id="confirmModalOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="stageModal">
+  <div class="modal">
+    <h2>Scene Size</h2>
+    <div class="sub">Working area resolution — affects the preview, emitter positions, and default export aspect ratio.</div>
+    <div class="row" id="stage_resHost"></div>
+    <div class="section-title">Quick presets</div>
+    <div class="row" style="flex-wrap:wrap;">
+      <button class="btn-sm" data-w="900" data-h="540">900×540 (default)</button>
+      <button class="btn-sm" data-w="1280" data-h="720">1280×720 (16:9)</button>
+      <button class="btn-sm" data-w="800" data-h="800">800×800 (1:1)</button>
+    </div>
+    <div class="row" style="flex-wrap:wrap;margin-top:6px;">
+      <button class="btn-sm" data-w="1024" data-h="768">1024×768 (4:3)</button>
+      <button class="btn-sm" data-w="540" data-h="960">540×960 (9:16 portrait)</button>
+      <button class="btn-sm" data-w="512" data-h="512">512×512 (small square)</button>
+    </div>
+    <div class="hint" style="margin-top:10px;">Existing emitter positions aren't automatically rescaled — after resizing you may need to fix positions on the stage.</div>
+    <div class="modal-foot">
+      <button class="hdr-btn" id="stage_cancel">Cancel</button>
+      <button class="hdr-btn primary" id="stage_apply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="exportModal">
+  <div class="modal">
+    <h2>Export to Texture Sheet</h2>
+    <div class="sub">Bake the whole scene (all active emitters, with their real positions) into files ready to use in a game engine.</div>
+
+    <div class="section-title">Export format</div>
+    <div class="toggle-group" id="exp_format">
+      <div class="toggle-opt active" data-val="sheet">Spritesheet (1 PNG file)</div>
+      <div class="toggle-opt" data-val="frames">Separate frames (ZIP)</div>
+    </div>
+
+    <div id="exp_gridSection">
+      <div class="section-title">Grid layout</div>
+      <div class="row" id="exp_gridHost"></div>
+      <label class="checkrow"><input type="checkbox" id="exp_autoGrid" checked> Automatic grid layout (based on frame count)</label>
+    </div>
+
+    <div class="section-title">Frame resolution</div>
+    <div class="row" id="exp_resHost"></div>
+    <label class="checkrow"><input type="checkbox" id="exp_lockAspect" checked> Keep scene aspect ratio (when changing width/height)</label>
+    <div class="hint" id="exp_resHint">The whole scene is scaled to the chosen frame resolution — the layout and relative positions of all emitters are preserved.</div>
+
+    <div class="section-title">Export duration</div>
+    <div class="row" id="exp_timeHost"></div>
+
+    <div class="section-title">Alpha channel (transparency)</div>
+    <div class="toggle-group" id="exp_alphaMode">
+      <div class="toggle-opt active" data-val="8bit">8-bit alpha (smooth edges)</div>
+      <div class="toggle-opt" data-val="1bit">1-bit alpha (pixel art)</div>
+    </div>
+    <div class="row" id="exp_thresholdHost" style="margin-top:8px;display:none;"></div>
+    <div class="hint">1-bit alpha mode forces every pixel to be either fully transparent or fully opaque (no semi-transparent edges) — ideal for pixel art.</div>
+
+    <div class="section-title">Output files</div>
+    <label class="checkrow" id="exp_metaRow"><input type="checkbox" id="exp_meta" checked> Include a .json metadata file (frame coordinates, Phaser/PixiJS-compatible format)</label>
+
+    <div class="modal-foot">
+      <button class="hdr-btn" id="exp_cancel">Cancel</button>
+      <button class="hdr-btn primary" id="exp_go">Render and download</button>
+    </div>
+  </div>
+</div>
+
+<div id="autosaveBanner">
+  <span>Found an auto-saved session.</span>
+  <button id="asDiscard">Discard</button>
+  <button class="accept" id="asAccept">Restore</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================
+   UTILS
+========================================================= */
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function lerp(a,b,t){return a+(b-a)*t;}
+function degToRad(d){return d*Math.PI/180;}
+function radToDeg(r){return r*180/Math.PI;}
+function hexToRgb(hex){
+  hex=hex.replace('#','');
+  if(hex.length===3) hex=hex.split('').map(c=>c+c).join('');
+  const n=parseInt(hex,16);
+  return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+function rgbToHex(r,g,b){
+  const h=(x)=>clamp(Math.round(x),0,255).toString(16).padStart(2,'0');
+  return '#'+h(r)+h(g)+h(b);
+}
+function lerpColor(hexA,hexB,t){
+  const a=hexToRgb(hexA), b=hexToRgb(hexB);
+  return rgbToHex(lerp(a.r,b.r,t),lerp(a.g,b.g,t),lerp(a.b,b.b,t));
+}
+function mulberry32(seed){
+  let a=seed>>>0;
+  return function(){
+    a|=0; a=a+0x6D2B79F5|0;
+    let t=Math.imul(a^a>>>15,1|a);
+    t=t+Math.imul(t^t>>>7,61|t)^t;
+    return ((t^t>>>14)>>>0)/4294967296;
+  };
+}
+function randRange(rng,min,max){return min+rng()*(max-min);}
+function uid(){return Math.random().toString(36).slice(2,9);}
+
+function sortCurve(curve){curve.sort((a,b)=>a.t-b.t);return curve;}
+function sampleCurve(curve,t){
+  if(!curve || !curve.length) return 1;
+  if(curve.length===1) return curve[0].v;
+  if(t<=curve[0].t) return curve[0].v;
+  if(t>=curve[curve.length-1].t) return curve[curve.length-1].v;
+  for(let i=0;i<curve.length-1;i++){
+    const a=curve[i], b=curve[i+1];
+    if(t>=a.t && t<=b.t){
+      const span=(b.t-a.t)||1e-6;
+      const f=(t-a.t)/span;
+      return lerp(a.v,b.v,f);
+    }
+  }
+  return curve[curve.length-1].v;
+}
+function sortGradient(stops){stops.sort((a,b)=>a.pos-b.pos);return stops;}
+function sampleGradient(stops,t){
+  if(!stops.length) return '#ffffff';
+  if(stops.length===1) return stops[0].color;
+  if(t<=stops[0].pos) return stops[0].color;
+  if(t>=stops[stops.length-1].pos) return stops[stops.length-1].color;
+  for(let i=0;i<stops.length-1;i++){
+    const a=stops[i], b=stops[i+1];
+    if(t>=a.pos && t<=b.pos){
+      const span=(b.pos-a.pos)||1e-6;
+      const f=(t-a.pos)/span;
+      return lerpColor(a.color,b.color,f);
+    }
+  }
+  return stops[stops.length-1].color;
+}
+
+/* ---------- value-noise (3D, deterministic, smooth) for turbulence ---------- */
+let _noiseHashCache=null;
+function noiseHash3(x,y,z){
+  let n = (x*374761393 + y*668265263 + z*2147483647) | 0;
+  n = (n ^ (n>>>13)) * 1274126177;
+  n = n ^ (n>>>16);
+  return ((n>>>0) / 4294967295);
+}
+function smoothStep01(t){ return t*t*(3-2*t); }
+function valueNoise3(x,y,z){
+  const xi=Math.floor(x), yi=Math.floor(y), zi=Math.floor(z);
+  const xf=x-xi, yf=y-yi, zf=z-zi;
+  const u=smoothStep01(xf), v=smoothStep01(yf), w=smoothStep01(zf);
+  function corner(dx,dy,dz){ return noiseHash3(xi+dx,yi+dy,zi+dz)*2-1; }
+  const c000=corner(0,0,0), c100=corner(1,0,0), c010=corner(0,1,0), c110=corner(1,1,0);
+  const c001=corner(0,0,1), c101=corner(1,0,1), c011=corner(0,1,1), c111=corner(1,1,1);
+  const x00=lerp(c000,c100,u), x10=lerp(c010,c110,u), x01=lerp(c001,c101,u), x11=lerp(c011,c111,u);
+  const y0=lerp(x00,x10,v), y1=lerp(x01,x11,v);
+  return lerp(y0,y1,w);
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+function showConfirm(message, onConfirm, opts){
+  opts=opts||{};
+  const modal=document.getElementById('confirmModal');
+  document.getElementById('confirmModalTitle').textContent=opts.title||'Confirm';
+  document.getElementById('confirmModalText').textContent=message;
+  const okBtn=document.getElementById('confirmModalOk');
+  const cancelBtn=document.getElementById('confirmModalCancel');
+  okBtn.textContent=opts.okLabel||'Confirm';
+  modal.classList.add('show');
+  function cleanup(){
+    modal.classList.remove('show');
+    okBtn.removeEventListener('click', onOk);
+    cancelBtn.removeEventListener('click', onCancel);
+  }
+  function onOk(){ cleanup(); onConfirm(); }
+  function onCancel(){ cleanup(); }
+  okBtn.addEventListener('click', onOk);
+  cancelBtn.addEventListener('click', onCancel);
+}
+
+const EMITTER_COLORS=['#ff5c3d','#3ddbff','#b47bff','#4ade80','#ffd93d','#ff4d6d','#5ec8ff','#f79d5c'];
+const UNIT_CURVE=[{t:0,v:1},{t:1,v:1}];
+
+/* =========================================================
+   DEFAULT SECTIONS
+========================================================= */
+function defaultEmitterSection(){
+  return {
+    shape:'circle',
+    lineLength:120, lineAngle:0,
+    circleRadius:40, circleFill:true,
+    rectW:100, rectH:60,
+    customMaskImage:null, customMaskSize:80,
+    mode:'continuous',
+    rate:60,
+    burstCount:40, burstInterval:1.0,
+    angle:-90, spread:28,
+    relativeAngle:false,
+    lifetimeMin:1.0, lifetimeMax:1.8,
+    startDelay:0,
+    subEmitter:{ enabled:false, mode:'deathBurst', targetEmitterId:null, burstCount:8, trailInterval:0.05 },
+    forceIndependentEmission:false
+  };
+}
+function defaultPhysicsSection(){
+  return {
+    speedMin:60, speedMax:140,
+    accel:0, maxSpeed:0,
+    gravityX:0, gravityY:40,
+    windX:0, windY:0,
+    radialAccel:0, tangentialAccel:0,
+    noiseEnabled:false, noiseStrength:40, noiseScale:0.01, noiseSpeed:0.5,
+    collisionEnabled:false, floorY:500, bounce:0.4
+  };
+}
+function defaultVisualsSection(){
+  return {
+    texture:'dot', customTextureImage:null,
+    customTextureAnimated:{ enabled:false, cols:1, rows:1, mode:'loop', loops:1 },
+    blend:'lighter',
+    sizeMin:8, sizeMax:16,
+    rotInitMin:0, rotInitMax:360,
+    rotSpeedMin:0, rotSpeedMax:0,
+    alignToDirection:false,
+    colorRandomize:{ enabled:false, colorA:'#ffffff', colorB:'#ffcc66' },
+    sizeCurve:[{t:0,v:0.3},{t:0.2,v:1},{t:1,v:0}],
+    alphaCurve:[{t:0,v:0},{t:0.15,v:1},{t:0.75,v:1},{t:1,v:0}],
+    speedCurve:[{t:0,v:1},{t:1,v:1}],
+    scaleXCurve:[{t:0,v:1},{t:1,v:1}],
+    scaleYCurve:[{t:0,v:1},{t:1,v:1}],
+    gradient:[{pos:0,color:'#fff6d6'},{pos:0.4,color:'#ffb23d'},{pos:1,color:'#ff3d3d'}]
+  };
+}
+function defaultTimelineSection(){
+  return {
+    duration:4,
+    loop:true,
+    keyframes:[{t:0,x:450,y:300,rot:0,mult:1}]
+  };
+}
+function buildEmitterFromPartial(partial, indexHint){
+  partial=partial||{};
+  const emitterSection=Object.assign(defaultEmitterSection(), partial.emitter||{});
+  emitterSection.subEmitter=Object.assign(defaultEmitterSection().subEmitter, (partial.emitter&&partial.emitter.subEmitter)||{});
+  const visualsSection=Object.assign(defaultVisualsSection(), partial.visuals||{});
+  visualsSection.colorRandomize=Object.assign(defaultVisualsSection().colorRandomize, (partial.visuals&&partial.visuals.colorRandomize)||{});
+  visualsSection.customTextureAnimated=Object.assign(defaultVisualsSection().customTextureAnimated, (partial.visuals&&partial.visuals.customTextureAnimated)||{});
+  return {
+    id: partial.id || uid(),
+    name: partial.name || ('Emitter '+((indexHint!==undefined?indexHint:0)+1)),
+    enabled: partial.enabled!==undefined ? partial.enabled : true,
+    emitter: emitterSection,
+    physics: Object.assign(defaultPhysicsSection(), partial.physics||{}),
+    visuals: visualsSection,
+    timeline: Object.assign(defaultTimelineSection(), partial.timeline||{}),
+    _texImg:null, _maskImg:null, _maskData:null, _acc:0, _nextBurst:0
+  };
+}
+function buildForceFromPartial(partial, indexHint){
+  partial=partial||{};
+  return Object.assign({
+    id: uid(), name:'Force '+((indexHint!==undefined?indexHint:0)+1), enabled:true,
+    shape:'circle', x:450, y:300, strength:200, radius:150, mode:'attract',
+    width:200, height:100, angle:0
+  }, partial);
+}
+function defaultConfig(){
+  return { version:4, stage:{width:900,height:540}, emitters:[ buildEmitterFromPartial({name:'Emitter 1'},0) ], forces:[] };
+}
+
+let cfg = defaultConfig();
+let selectedEmitterIdx = 0;
+let selectedKfIndex = 0;
+let selectedGradIndex = 0;
+let selectedForceIdx = -1;
+let isDirty=false;
+
+function curEmitter(){ return cfg.emitters[selectedEmitterIdx] || cfg.emitters[0]; }
+function curForce(){ return cfg.forces[selectedForceIdx]; }
+
+/* =========================================================
+   IMAGES (custom textures / masks) — per emitter
+========================================================= */
+function loadImageFromDataURL(dataURL, cb){
+  const img=new Image();
+  img.onload=()=>cb(img);
+  img.src=dataURL;
+}
+function rebuildCustomTexImage(ec){
+  if(ec.visuals.customTextureImage){
+    loadImageFromDataURL(ec.visuals.customTextureImage, img=>{ ec._texImg=img; });
+  } else ec._texImg=null;
+}
+function rebuildCustomMask(ec){
+  if(ec.emitter.customMaskImage){
+    loadImageFromDataURL(ec.emitter.customMaskImage, img=>{
+      const w=Math.min(96,img.width), h=Math.min(96,img.height);
+      const c=document.createElement('canvas'); c.width=w;c.height=h;
+      const cx=c.getContext('2d'); cx.drawImage(img,0,0,w,h);
+      const data=cx.getImageData(0,0,w,h).data;
+      ec._maskImg=img;
+      ec._maskData={w,h,alpha:data};
+    });
+  } else { ec._maskImg=null; ec._maskData=null; }
+}
+function rebuildAllEmitterCaches(){
+  cfg.emitters.forEach(ec=>{ rebuildCustomTexImage(ec); rebuildCustomMask(ec); });
+}
+
+/* =========================================================
+   PARTICLE SYSTEM (shared spawn/step logic used by live sim AND export bake)
+========================================================= */
+let particles=[];
+let simTime=0;
+let playing=true;
+let rng=mulberry32(12345);
+let liveAccStore=new Map();
+const MAX_PARTICLES=2800;
+
+function resetSim(){
+  particles=[]; simTime=0;
+  liveAccStore=new Map();
+  rng=mulberry32((Math.random()*1e9)|0);
+}
+
+function getEmitterState(ec, t){
+  const kfsRaw = ec.timeline.keyframes;
+  if(kfsRaw.length===0) return {x:450,y:300,rot:0,mult:1};
+  const kfs=[...kfsRaw].sort((a,b)=>a.t-b.t);
+  if(kfs.length===1) return {x:kfs[0].x,y:kfs[0].y,rot:kfs[0].rot,mult:kfs[0].mult};
+  const dur = ec.timeline.duration>0 ? ec.timeline.duration : kfs[kfs.length-1].t;
+  let list = kfs;
+  if(ec.timeline.loop) list=[...kfs, {...kfs[0], t:dur}];
+  let tw = ec.timeline.loop ? ((t%dur)+dur)%dur : clamp(t,0,dur);
+  if(tw<=list[0].t) return {x:list[0].x,y:list[0].y,rot:list[0].rot,mult:list[0].mult};
+  for(let i=0;i<list.length-1;i++){
+    if(tw>=list[i].t && tw<=list[i+1].t){
+      const span=(list[i+1].t-list[i].t)||1e-6;
+      const f=(tw-list[i].t)/span;
+      return {
+        x:lerp(list[i].x,list[i+1].x,f),
+        y:lerp(list[i].y,list[i+1].y,f),
+        rot:lerp(list[i].rot,list[i+1].rot,f),
+        mult:lerp(list[i].mult,list[i+1].mult,f)
+      };
+    }
+  }
+  const last=list[list.length-1];
+  return {x:last.x,y:last.y,rot:last.rot,mult:last.mult};
+}
+
+function sampleShapeLocal(ec, rngFn, rotDeg){
+  const e=ec.emitter;
+  let lx=0,ly=0;
+  if(e.shape==='point'){ lx=0; ly=0; }
+  else if(e.shape==='line'){
+    const half=e.lineLength/2;
+    const s=randRange(rngFn,-1,1)*half;
+    const a=degToRad(e.lineAngle);
+    lx=Math.cos(a)*s; ly=Math.sin(a)*s;
+  } else if(e.shape==='circle'){
+    const r = e.circleFill ? Math.sqrt(rngFn())*e.circleRadius : e.circleRadius;
+    let a;
+    if(e.spread>=180 || e.relativeAngle){
+      a = rngFn()*Math.PI*2;
+    } else {
+      const baseA=degToRad(e.angle);
+      const spreadA=degToRad(e.spread);
+      a = baseA + (rngFn()*2-1)*spreadA;
+    }
+    lx=Math.cos(a)*r; ly=Math.sin(a)*r;
+  } else if(e.shape==='rect'){
+    lx=(rngFn()-0.5)*e.rectW; ly=(rngFn()-0.5)*e.rectH;
+  } else if(e.shape==='custom'){
+    const md=ec._maskData;
+    if(md && md.w>0){
+      let found=false;
+      for(let tries=0;tries<25 && !found;tries++){
+        const px=Math.floor(rngFn()*md.w), py=Math.floor(rngFn()*md.h);
+        const alpha=md.alpha[(py*md.w+px)*4+3];
+        if(alpha>10){
+          const scale=e.customMaskSize/Math.max(md.w,md.h);
+          lx=(px-md.w/2)*scale; ly=(py-md.h/2)*scale;
+          found=true;
+        }
+      }
+      if(!found){lx=0;ly=0;}
+    } else { lx=0; ly=0; }
+  }
+  const rr=degToRad(rotDeg);
+  const cos=Math.cos(rr), sin=Math.sin(rr);
+  return { x: lx*cos-ly*sin, y: lx*sin+ly*cos };
+}
+
+function resolveEmitterById(id){
+  return cfg.emitters.find(x=>x.id===id);
+}
+
+/** True if some other enabled emitter's active sub-emitter link points at `ec` —
+ * meaning `ec` is being used purely as a spawn template and should not also
+ * generate its own independent effect at its own timeline position, unless
+ * the user explicitly opts in via forceIndependentEmission. */
+function isSubEmitterTarget(ec){
+  return cfg.emitters.some(other=>
+    other!==ec && other.enabled!==false &&
+    other.emitter.subEmitter && other.emitter.subEmitter.enabled &&
+    other.emitter.subEmitter.targetEmitterId===ec.id
+  );
+}
+function getTargetingEmitterNames(ec){
+  return cfg.emitters.filter(other=>
+    other!==ec && other.enabled!==false &&
+    other.emitter.subEmitter && other.emitter.subEmitter.enabled &&
+    other.emitter.subEmitter.targetEmitterId===ec.id
+  ).map(o=>o.name);
+}
+
+/** Spawns one particle from `ec`'s own config into `particlesArr`.
+ * If overridePos {x,y,rot} is given (sub-emitter trigger), the particle's shape
+ * sampling is centered there instead of ec's own timeline position. */
+function spawnFrom(particlesArr, rngFn, ec, timeNow, overridePos){
+  if(particlesArr.length>=MAX_PARTICLES) return;
+  const e=ec.emitter, v=ec.visuals, p=ec.physics;
+  const es = overridePos || getEmitterState(ec, timeNow);
+  const local=sampleShapeLocal(ec, rngFn, es.rot||0);
+  const x=es.x+local.x, y=es.y+local.y;
+  let baseAngle;
+  if(e.relativeAngle && Math.hypot(local.x,local.y)>0.001){
+    baseAngle=radToDeg(Math.atan2(local.y, local.x));
+  } else {
+    baseAngle=e.angle+(es.rot||0);
+  }
+  const spreadOff=randRange(rngFn,-1,1)*e.spread;
+  const angRad=degToRad(baseAngle+spreadOff);
+  const speed=randRange(rngFn,p.speedMin,p.speedMax);
+  const vx=Math.cos(angRad)*speed, vy=Math.sin(angRad)*speed;
+
+  let startColorOverride=null;
+  if(v.colorRandomize && v.colorRandomize.enabled){
+    startColorOverride=lerpColor(v.colorRandomize.colorA, v.colorRandomize.colorB, rngFn());
+  }
+  let customFrameIndex=0;
+  if(v.texture==='custom' && v.customTextureAnimated && v.customTextureAnimated.enabled && v.customTextureAnimated.mode==='random'){
+    const total=Math.max(1,(v.customTextureAnimated.cols||1)*(v.customTextureAnimated.rows||1));
+    customFrameIndex=Math.floor(rngFn()*total);
+  }
+
+  particlesArr.push({
+    x,y,vx,vy,
+    age:0,
+    maxLife:randRange(rngFn,e.lifetimeMin,e.lifetimeMax),
+    baseSize:randRange(rngFn,v.sizeMin,v.sizeMax),
+    rotation:randRange(rngFn,v.rotInitMin,v.rotInitMax),
+    rotSpeed:randRange(rngFn,v.rotSpeedMin,v.rotSpeedMax),
+    emitterX:es.x, emitterY:es.y,
+    src:ec,
+    startColorOverride,
+    customFrameIndex,
+    trailAcc:0
+  });
+}
+
+function getAccEntry(store, ec){
+  let entry=store.get(ec);
+  if(!entry){ entry={acc:0,nextBurst:0}; store.set(ec,entry); }
+  return entry;
+}
+
+function advanceEmitters(particlesArr, rngFn, timeNow, dt, accStore){
+  for(const ec of cfg.emitters){
+    if(ec.enabled===false) continue;
+    const e=ec.emitter;
+    if(isSubEmitterTarget(ec) && !e.forceIndependentEmission) continue;
+    if(timeNow < (e.startDelay||0)) continue;
+    const accEntry=getAccEntry(accStore, ec);
+
+    const dur=ec.timeline.duration;
+    if(ec.timeline.loop && dur>0){
+      const iter=Math.floor(timeNow/dur);
+      if(accEntry.lastLoopIter===undefined){
+        accEntry.lastLoopIter=iter;
+      } else if(iter!==accEntry.lastLoopIter){
+        accEntry.lastLoopIter=iter;
+        accEntry.acc=0;
+        accEntry.nextBurst=timeNow;
+      }
+    }
+
+    const es=getEmitterState(ec, timeNow);
+    if(e.mode==='continuous'){
+      accEntry.acc += e.rate*Math.max(0,es.mult)*dt;
+      while(accEntry.acc>=1){ spawnFrom(particlesArr, rngFn, ec, timeNow); accEntry.acc-=1; }
+    } else {
+      if(timeNow>=accEntry.nextBurst){
+        const count=Math.round(e.burstCount*Math.max(0,es.mult));
+        for(let i=0;i<count;i++) spawnFrom(particlesArr, rngFn, ec, timeNow);
+        accEntry.nextBurst=timeNow+Math.max(0.02,e.burstInterval);
+      }
+    }
+  }
+}
+
+function advanceParticles(particlesArr, rngFn, timeNow, dt, forces){
+  for(let i=particlesArr.length-1;i>=0;i--){
+    const pt=particlesArr[i];
+    const p=pt.src.physics, v=pt.src.visuals;
+    pt.age+=dt;
+
+    if(pt.age>=pt.maxLife){
+      const se=pt.src.emitter.subEmitter;
+      if(se && se.enabled && se.mode==='deathBurst' && se.targetEmitterId){
+        const target=resolveEmitterById(se.targetEmitterId);
+        if(target){
+          const count=Math.max(0,Math.round(se.burstCount||1));
+          for(let k=0;k<count;k++) spawnFrom(particlesArr, rngFn, target, timeNow, {x:pt.x,y:pt.y,rot:0});
+        }
+      }
+      particlesArr.splice(i,1);
+      continue;
+    }
+
+    const se=pt.src.emitter.subEmitter;
+    if(se && se.enabled && se.mode==='trail' && se.targetEmitterId){
+      const target=resolveEmitterById(se.targetEmitterId);
+      if(target){
+        pt.trailAcc=(pt.trailAcc||0)+dt;
+        const interval=Math.max(0.01, se.trailInterval||0.05);
+        let guard=0;
+        while(pt.trailAcc>=interval && guard<20){ spawnFrom(particlesArr, rngFn, target, timeNow, {x:pt.x,y:pt.y,rot:0}); pt.trailAcc-=interval; guard++; }
+      }
+    }
+
+    const toPx=pt.x-pt.emitterX, toPy=pt.y-pt.emitterY;
+    const dist=Math.hypot(toPx,toPy)||1e-6;
+    const radX=toPx/dist, radY=toPy/dist;
+    const tanX=-radY, tanY=radX;
+    const speedMag=Math.hypot(pt.vx,pt.vy)||1e-6;
+    const dirX=pt.vx/speedMag, dirY=pt.vy/speedMag;
+    let ax = p.gravityX+p.windX + p.radialAccel*radX + p.tangentialAccel*tanX + p.accel*dirX;
+    let ay = p.gravityY+p.windY + p.radialAccel*radY + p.tangentialAccel*tanY + p.accel*dirY;
+
+    if(p.noiseEnabled){
+      const nx=valueNoise3(pt.x*p.noiseScale, pt.y*p.noiseScale, timeNow*p.noiseSpeed);
+      const ny=valueNoise3(pt.x*p.noiseScale+137.2, pt.y*p.noiseScale+91.7, timeNow*p.noiseSpeed);
+      ax += nx*p.noiseStrength;
+      ay += ny*p.noiseStrength;
+    }
+
+    if(forces && forces.length){
+      for(const f of forces){
+        if(f.enabled===false) continue;
+        let inside=true, factor=1, fdirx=0, fdiry=0;
+        if(f.shape==='rect'){
+          const rr=-degToRad(f.angle||0);
+          const dx=pt.x-f.x, dy=pt.y-f.y;
+          const lx=dx*Math.cos(rr)-dy*Math.sin(rr);
+          const ly=dx*Math.sin(rr)+dy*Math.cos(rr);
+          const hw=(f.width||200)/2, hh=(f.height||100)/2;
+          inside = Math.abs(lx)<=hw && Math.abs(ly)<=hh;
+          if(f.mode==='directional'){
+            const ar=degToRad(f.angle||0);
+            fdirx=Math.cos(ar); fdiry=Math.sin(ar);
+          } else {
+            const fdx=f.x-pt.x, fdy=f.y-pt.y;
+            const fd=Math.hypot(fdx,fdy)||1e-6;
+            fdirx=fdx/fd; fdiry=fdy/fd;
+            if(f.mode==='repel'){ fdirx=-fdirx; fdiry=-fdiry; }
+          }
+        } else {
+          const fdx=f.x-pt.x, fdy=f.y-pt.y;
+          const fd=Math.hypot(fdx,fdy)||1e-6;
+          inside = !(f.radius>0) || fd<=f.radius;
+          factor = f.radius>0 ? (1-fd/f.radius) : 1;
+          if(f.mode==='directional'){
+            const ar=degToRad(f.angle||0);
+            fdirx=Math.cos(ar); fdiry=Math.sin(ar);
+          } else {
+            fdirx=fdx/fd; fdiry=fdy/fd;
+            if(f.mode==='repel'){ fdirx=-fdirx; fdiry=-fdiry; }
+          }
+        }
+        if(!inside) continue;
+        ax += fdirx*f.strength*factor;
+        ay += fdiry*f.strength*factor;
+      }
+    }
+
+    pt.vx+=ax*dt; pt.vy+=ay*dt;
+    if(p.maxSpeed>0){
+      const m=Math.hypot(pt.vx,pt.vy);
+      if(m>p.maxSpeed){ const s=p.maxSpeed/m; pt.vx*=s; pt.vy*=s; }
+    }
+    const ageN=pt.age/pt.maxLife;
+    const speedMul=sampleCurve(v.speedCurve,ageN);
+    pt.x+=pt.vx*speedMul*dt;
+    pt.y+=pt.vy*speedMul*dt;
+    pt.rotation+=pt.rotSpeed*dt;
+    if(p.collisionEnabled && pt.y>=p.floorY && pt.vy>0){
+      pt.y=p.floorY; pt.vy=-pt.vy*p.bounce; pt.vx*=p.bounce;
+    }
+  }
+}
+
+function stepSim(dt){
+  advanceEmitters(particles, rng, simTime, dt, liveAccStore);
+  advanceParticles(particles, rng, simTime, dt, cfg.forces);
+}
+
+/* =========================================================
+   RENDERING
+========================================================= */
+function drawTextureShape(ctx, type, size, color, img, animInfo){
+  ctx.fillStyle=color;
+  if(type==='dot'){
+    const g=ctx.createRadialGradient(0,0,0,0,0,size/2);
+    g.addColorStop(0,color); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(0,0,size/2,0,Math.PI*2); ctx.fill();
+  } else if(type==='smoke'){
+    const g=ctx.createRadialGradient(0,0,0,0,0,size/2);
+    const rgb=hexToRgb(color);
+    g.addColorStop(0,'rgba('+rgb.r+','+rgb.g+','+rgb.b+',0.55)');
+    g.addColorStop(1,'rgba('+rgb.r+','+rgb.g+','+rgb.b+',0)');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(0,0,size/2,0,Math.PI*2); ctx.fill();
+  } else if(type==='ring'){
+    ctx.strokeStyle=color; ctx.lineWidth=Math.max(1,size*0.15);
+    ctx.beginPath(); ctx.arc(0,0,size/2,0,Math.PI*2); ctx.stroke();
+  } else if(type==='star'){
+    const spikes=5, outer=size/2, inner=outer*0.45;
+    ctx.beginPath();
+    for(let i=0;i<spikes*2;i++){
+      const r=(i%2===0)?outer:inner;
+      const a=(Math.PI/spikes)*i - Math.PI/2;
+      const px=Math.cos(a)*r, py=Math.sin(a)*r;
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+  } else if(type==='square'){
+    ctx.fillRect(-size/2,-size*0.32,size,size*0.64);
+  } else if(type==='line'){
+    ctx.fillRect(-size/2,-size*0.055,size,size*0.11);
+  } else if(type==='triangle'){
+    ctx.beginPath();
+    ctx.moveTo(0,-size/2);
+    ctx.lineTo(size/2,size/2);
+    ctx.lineTo(-size/2,size/2);
+    ctx.closePath(); ctx.fill();
+  } else if(type==='cross'){
+    const outer=size/2, inner=outer*0.16;
+    ctx.beginPath();
+    for(let i=0;i<8;i++){
+      const r=(i%2===0)?outer:inner;
+      const a=(Math.PI/4)*i - Math.PI/2;
+      const px=Math.cos(a)*r, py=Math.sin(a)*r;
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+  } else if(type==='hexagon'){
+    ctx.beginPath();
+    for(let i=0;i<6;i++){
+      const a=(Math.PI/3)*i - Math.PI/2;
+      const px=Math.cos(a)*size/2, py=Math.sin(a)*size/2;
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+  } else if(type==='diamond'){
+    ctx.beginPath();
+    ctx.moveTo(0,-size/2);
+    ctx.lineTo(size/2,0);
+    ctx.lineTo(0,size/2);
+    ctx.lineTo(-size/2,0);
+    ctx.closePath(); ctx.fill();
+  } else if(type==='heart'){
+    const s=size/2;
+    ctx.beginPath();
+    ctx.moveTo(0, s*0.35);
+    ctx.bezierCurveTo(s*0.2, s*0.05, s*0.55, -s*0.35, s*0.95, -s*0.05);
+    ctx.bezierCurveTo(s*1.35, s*0.25, s*0.9, s*0.8, 0, s*1.2);
+    ctx.bezierCurveTo(-s*0.9, s*0.8, -s*1.35, s*0.25, -s*0.95, -s*0.05);
+    ctx.bezierCurveTo(-s*0.55, -s*0.35, -s*0.2, s*0.05, 0, s*0.35);
+    ctx.closePath(); ctx.fill();
+  } else if(type==='custom' && img){
+    if(animInfo && (animInfo.cols>1 || animInfo.rows>1)){
+      const cols=Math.max(1,animInfo.cols), rows=Math.max(1,animInfo.rows);
+      const total=cols*rows;
+      const idx=clamp(animInfo.frameIndex,0,total-1);
+      const fw=img.width/cols, fh=img.height/rows;
+      const sx=(idx%cols)*fw, sy=Math.floor(idx/cols)*fh;
+      ctx.drawImage(img, sx,sy,fw,fh, -size/2,-size/2,size,size);
+    } else {
+      ctx.drawImage(img,-size/2,-size/2,size,size);
+    }
+  } else {
+    ctx.beginPath(); ctx.arc(0,0,size/2,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawParticle(ctx, pt, cfgV){
+  const ageN=clamp(pt.age/pt.maxLife,0,1);
+  const size=pt.baseSize*sampleCurve(cfgV.sizeCurve,ageN);
+  const alpha=clamp(sampleCurve(cfgV.alphaCurve,ageN),0,1);
+  if(size<=0.01 || alpha<=0.003) return;
+  const scaleX=sampleCurve(cfgV.scaleXCurve||UNIT_CURVE,ageN);
+  const scaleY=sampleCurve(cfgV.scaleYCurve||UNIT_CURVE,ageN);
+
+  let color;
+  if(pt.startColorOverride && cfgV.gradient && cfgV.gradient.length){
+    const stops=cfgV.gradient;
+    const effStops=[{pos:stops[0].pos,color:pt.startColorOverride}].concat(stops.slice(1));
+    color=sampleGradient(effStops,ageN);
+  } else {
+    color=sampleGradient(cfgV.gradient,ageN);
+  }
+
+  ctx.save();
+  ctx.translate(pt.x,pt.y);
+  let rot=pt.rotation;
+  if(cfgV.alignToDirection){ rot+=radToDeg(Math.atan2(pt.vy,pt.vx)); }
+  ctx.rotate(degToRad(rot));
+  ctx.scale(scaleX||0.001, scaleY||0.001);
+  ctx.globalAlpha=alpha;
+  ctx.globalCompositeOperation=cfgV.blend;
+
+  let img=null, animInfo=null;
+  if(cfgV.texture==='custom'){
+    img = pt.src && pt.src._texImg;
+    const anim=cfgV.customTextureAnimated;
+    if(anim && anim.enabled && img){
+      const total=Math.max(1,(anim.cols||1)*(anim.rows||1));
+      let frameIndex;
+      if(anim.mode==='random'){ frameIndex=pt.customFrameIndex||0; }
+      else if(anim.mode==='once'){ frameIndex=Math.min(total-1, Math.floor(ageN*total)); }
+      else { const loops=Math.max(1,anim.loops||1); frameIndex=Math.floor(ageN*total*loops)%total; }
+      animInfo={cols:anim.cols, rows:anim.rows, frameIndex};
+    }
+  }
+  drawTextureShape(ctx, cfgV.texture, size, color, img, animInfo);
+  ctx.restore();
+}
+
+/* ---------- Preview canvas + gizmo ---------- */
+const canvas=document.getElementById('previewCanvas');
+const ctx=canvas.getContext('2d');
+let gizmoDrag=null;
+
+function fitCanvasToWrapper(){
+  const wrap=document.getElementById('previewWrap');
+  const padding=32;
+  const availW=Math.max(50, wrap.clientWidth-padding);
+  const availH=Math.max(50, wrap.clientHeight-padding);
+  const stageW=canvas.width, stageH=canvas.height;
+  const scale=Math.min(availW/stageW, availH/stageH);
+  const cssW=Math.max(1,Math.round(stageW*scale));
+  const cssH=Math.max(1,Math.round(stageH*scale));
+  canvas.style.width=cssW+'px';
+  canvas.style.height=cssH+'px';
+  positionStageHandles();
+}
+function positionStageHandles(){
+  const wrap=document.getElementById('previewWrap');
+  const wrapRect=wrap.getBoundingClientRect();
+  const canRect=canvas.getBoundingClientRect();
+  const left=canRect.left-wrapRect.left, top=canRect.top-wrapRect.top;
+  const w=canRect.width, h=canRect.height;
+
+  const rightH=document.getElementById('stageHandleRight');
+  const barLen=Math.min(48, h*0.35);
+  rightH.style.left=(left+w-3)+'px';
+  rightH.style.top=(top+h/2-barLen/2)+'px';
+  rightH.style.width='6px';
+  rightH.style.height=barLen+'px';
+
+  const bottomH=document.getElementById('stageHandleBottom');
+  const barLenH=Math.min(48, w*0.35);
+  bottomH.style.left=(left+w/2-barLenH/2)+'px';
+  bottomH.style.top=(top+h-3)+'px';
+  bottomH.style.width=barLenH+'px';
+  bottomH.style.height='6px';
+
+  const cornerH=document.getElementById('stageHandleCorner');
+  cornerH.style.left=(left+w-12)+'px';
+  cornerH.style.top=(top+h-12)+'px';
+  cornerH.style.width='16px';
+  cornerH.style.height='16px';
+
+  const label=document.getElementById('stageSizeLabel');
+  label.style.left=(left+w/2)+'px';
+  label.style.top=(top+h+10)+'px';
+  label.style.transform='translateX(-50%)';
+}
+function applyStageSize(w,h,skipToast){
+  w=Math.round(clamp(w,64,4096)); h=Math.round(clamp(h,64,4096));
+  canvas.width=w; canvas.height=h;
+  if(cfg) cfg.stage={width:w,height:h};
+  fitCanvasToWrapper();
+  markDirty();
+  if(!skipToast) showToast('Scene size: '+w+'×'+h+' px');
+}
+if(window.ResizeObserver){
+  new ResizeObserver(()=>fitCanvasToWrapper()).observe(document.getElementById('previewWrap'));
+}
+window.addEventListener('resize', fitCanvasToWrapper);
+
+function setupStageHandleDrag(el, axis){
+  el.addEventListener('pointerdown',(evt)=>{
+    evt.preventDefault(); evt.stopPropagation();
+    el.classList.add('dragging');
+    el.setPointerCapture(evt.pointerId);
+    const startX=evt.clientX, startY=evt.clientY;
+    const startW=canvas.width, startH=canvas.height;
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=canvas.width/rect.width, scaleY=canvas.height/rect.height;
+    const label=document.getElementById('stageSizeLabel');
+    label.classList.add('show');
+    function move(ev){
+      const dxStage=(ev.clientX-startX)*scaleX;
+      const dyStage=(ev.clientY-startY)*scaleY;
+      let newW=startW, newH=startH;
+      if(axis==='w'||axis==='both') newW=startW+dxStage;
+      if(axis==='h'||axis==='both') newH=startH+dyStage;
+      applyStageSize(newW, newH, true);
+      label.textContent=canvas.width+' × '+canvas.height+' px';
+    }
+    function up(){
+      window.removeEventListener('pointermove',move);
+      window.removeEventListener('pointerup',up);
+      el.classList.remove('dragging');
+      label.classList.remove('show');
+      showToast('Scene size: '+canvas.width+'×'+canvas.height+' px');
+      markDirty();
+    }
+    window.addEventListener('pointermove',move);
+    window.addEventListener('pointerup',up);
+  });
+}
+setupStageHandleDrag(document.getElementById('stageHandleRight'),'w');
+setupStageHandleDrag(document.getElementById('stageHandleBottom'),'h');
+setupStageHandleDrag(document.getElementById('stageHandleCorner'),'both');
+
+const stageModal=document.getElementById('stageModal');
+document.getElementById('btnStageSize').addEventListener('click',()=>{
+  const host=document.getElementById('stage_resHost'); host.innerHTML='';
+  let wField, hField;
+  wField=numField({label:'Width', value:canvas.width, min:64,max:4096,step:8,unit:'px', onChange:v=>{}});
+  hField=numField({label:'Height', value:canvas.height, min:64,max:4096,step:8,unit:'px', onChange:v=>{}});
+  host.appendChild(wField.el); host.appendChild(hField.el);
+  stageModal._wField=wField; stageModal._hField=hField;
+  stageModal.classList.add('show');
+});
+document.getElementById('stage_cancel').addEventListener('click',()=>stageModal.classList.remove('show'));
+document.getElementById('stage_apply').addEventListener('click',()=>{
+  const w=stageModal._wField.value, h=stageModal._hField.value;
+  applyStageSize(w,h);
+  stageModal.classList.remove('show');
+});
+document.querySelectorAll('#stageModal .btn-sm[data-w]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const w=parseInt(btn.dataset.w,10), h=parseInt(btn.dataset.h,10);
+    if(stageModal._wField) stageModal._wField.value=w;
+    if(stageModal._hField) stageModal._hField.value=h;
+  });
+});
+
+function canvasCoords(evt){
+  const r=canvas.getBoundingClientRect();
+  const sx=canvas.width/r.width, sy=canvas.height/r.height;
+  return { x:(evt.clientX-r.left)*sx, y:(evt.clientY-r.top)*sy };
+}
+function activeTabName(){ return document.querySelector('.tab-btn.active').dataset.tab; }
+
+function drawEmitterGizmo(){
+  const ec=curEmitter(); if(!ec) return;
+  const es=getEmitterState(ec, simTime);
+  const e=ec.emitter;
+  ctx.save();
+  ctx.strokeStyle='rgba(61,219,255,0.55)';
+  ctx.fillStyle='rgba(61,219,255,0.9)';
+  ctx.lineWidth=1.5;
+  ctx.setLineDash([4,3]);
+
+  if(e.shape==='circle'){
+    ctx.beginPath(); ctx.arc(es.x,es.y,e.circleRadius,0,Math.PI*2); ctx.stroke();
+    drawHandle(es.x+e.circleRadius, es.y);
+  } else if(e.shape==='rect'){
+    ctx.save();
+    ctx.translate(es.x,es.y); ctx.rotate(degToRad(es.rot));
+    ctx.strokeRect(-e.rectW/2,-e.rectH/2,e.rectW,e.rectH);
+    ctx.restore();
+    const rr=degToRad(es.rot);
+    const cx=Math.cos(rr), sn=Math.sin(rr);
+    const lx=e.rectW/2, ly=e.rectH/2;
+    drawHandle(es.x+(lx*cx-ly*sn), es.y+(lx*sn+ly*cx));
+  } else if(e.shape==='line'){
+    const rr=degToRad(e.lineAngle+es.rot);
+    const half=e.lineLength/2;
+    const ex1=es.x-Math.cos(rr)*half, ey1=es.y-Math.sin(rr)*half;
+    const ex2=es.x+Math.cos(rr)*half, ey2=es.y+Math.sin(rr)*half;
+    ctx.beginPath(); ctx.moveTo(ex1,ey1); ctx.lineTo(ex2,ey2); ctx.stroke();
+    drawHandle(ex2,ey2);
+  }
+  ctx.setLineDash([]);
+  ctx.strokeStyle='rgba(255,92,61,0.5)';
+  const baseA=degToRad(e.angle+es.rot);
+  const spreadA=degToRad(e.spread);
+  const len=46;
+  ctx.beginPath(); ctx.moveTo(es.x,es.y);
+  ctx.lineTo(es.x+Math.cos(baseA-spreadA)*len, es.y+Math.sin(baseA-spreadA)*len);
+  ctx.moveTo(es.x,es.y);
+  ctx.lineTo(es.x+Math.cos(baseA+spreadA)*len, es.y+Math.sin(baseA+spreadA)*len);
+  ctx.stroke();
+
+  ctx.fillStyle='rgba(255,92,61,0.95)';
+  ctx.beginPath(); ctx.arc(es.x,es.y,7,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#0a0d12'; ctx.lineWidth=2; ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  cfg.emitters.forEach((oec,idx)=>{
+    if(idx===selectedEmitterIdx) return;
+    const oes=getEmitterState(oec, simTime);
+    ctx.fillStyle=EMITTER_COLORS[idx%EMITTER_COLORS.length];
+    ctx.globalAlpha=0.5;
+    ctx.beginPath(); ctx.arc(oes.x,oes.y,4,0,Math.PI*2); ctx.fill();
+  });
+  ctx.restore();
+}
+function drawHandle(x,y){
+  ctx.save();
+  ctx.fillStyle='rgba(61,219,255,0.95)';
+  ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#0a0d12'; ctx.lineWidth=2; ctx.stroke();
+  ctx.restore();
+}
+function drawForceIcon(f, isSelected){
+  ctx.save();
+  ctx.globalAlpha = f.enabled===false ? 0.35 : 1;
+  const col = f.mode==='repel' ? 'rgba(255,77,109,0.6)' : f.mode==='directional' ? 'rgba(61,219,255,0.6)' : 'rgba(74,222,128,0.6)';
+  ctx.strokeStyle = col;
+  ctx.setLineDash([4,3]); ctx.lineWidth=1.5;
+  if((f.shape||'circle')==='rect'){
+    ctx.save();
+    ctx.translate(f.x,f.y); ctx.rotate(degToRad(f.angle||0));
+    ctx.strokeRect(-(f.width||200)/2, -(f.height||100)/2, f.width||200, f.height||100);
+    ctx.restore();
+  } else if(f.radius>0){
+    ctx.beginPath(); ctx.arc(f.x,f.y,f.radius,0,Math.PI*2); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  if(f.mode==='directional'){
+    const ar=degToRad(f.angle||0);
+    const len=Math.min(50, ((f.shape==='rect'?Math.max(f.width,f.height):f.radius)||100)*0.4+20);
+    ctx.strokeStyle=col; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(f.x,f.y); ctx.lineTo(f.x+Math.cos(ar)*len, f.y+Math.sin(ar)*len); ctx.stroke();
+    const ah=7, ax2=f.x+Math.cos(ar)*len, ay2=f.y+Math.sin(ar)*len;
+    ctx.beginPath();
+    ctx.moveTo(ax2,ay2);
+    ctx.lineTo(ax2-Math.cos(ar-0.4)*ah, ay2-Math.sin(ar-0.4)*ah);
+    ctx.lineTo(ax2-Math.cos(ar+0.4)*ah, ay2-Math.sin(ar+0.4)*ah);
+    ctx.closePath(); ctx.fillStyle=col; ctx.fill();
+  }
+  ctx.fillStyle = f.mode==='repel' ? '#ff4d6d' : f.mode==='directional' ? '#3ddbff' : '#4ade80';
+  ctx.beginPath(); ctx.arc(f.x,f.y,isSelected?10:8,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#0a0d12'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#0a0d12'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(f.mode==='repel'?'−':f.mode==='directional'?'→':'+', f.x, f.y+0.5);
+  ctx.restore();
+}
+function drawForcesOverlay(){
+  if(activeTabName()!=='forces') return;
+  cfg.forces.forEach((f,idx)=>drawForceIcon(f, idx===selectedForceIdx));
+}
+function drawGizmo(){
+  const tab=activeTabName();
+  if(tab==='emitter') drawEmitterGizmo();
+  if(tab==='forces') drawForcesOverlay();
+}
+
+canvas.addEventListener('pointerdown',(evt)=>{
+  const tab=activeTabName();
+  const p=canvasCoords(evt);
+  const distTo=(x,y)=>Math.hypot(p.x-x,p.y-y);
+
+  if(tab==='emitter'){
+    const ec=curEmitter(); if(!ec) return;
+    const es=getEmitterState(ec, simTime);
+    const e=ec.emitter;
+    if(e.shape==='circle' && distTo(es.x+e.circleRadius,es.y)<12){ gizmoDrag={type:'radius'}; }
+    else if(e.shape==='rect'){
+      const rr=degToRad(es.rot); const cx=Math.cos(rr), sn=Math.sin(rr);
+      const lx=e.rectW/2, ly=e.rectH/2;
+      const hx=es.x+(lx*cx-ly*sn), hy=es.y+(lx*sn+ly*cx);
+      if(distTo(hx,hy)<12) gizmoDrag={type:'rectcorner'};
+    } else if(e.shape==='line'){
+      const rr=degToRad(e.lineAngle+es.rot); const half=e.lineLength/2;
+      const ex2=es.x+Math.cos(rr)*half, ey2=es.y+Math.sin(rr)*half;
+      if(distTo(ex2,ey2)<12) gizmoDrag={type:'lineend'};
+    }
+    if(!gizmoDrag && distTo(es.x,es.y)<14){ gizmoDrag={type:'center'}; }
+    if(gizmoDrag) canvas.setPointerCapture(evt.pointerId);
+  } else if(tab==='forces'){
+    let hit=-1;
+    cfg.forces.forEach((f,idx)=>{ if(distTo(f.x,f.y)<14) hit=idx; });
+    if(hit>=0){
+      selectedForceIdx=hit;
+      gizmoDrag={type:'force'};
+      canvas.setPointerCapture(evt.pointerId);
+      rebuildForcesList(); buildForceFields();
+    }
+  }
+});
+canvas.addEventListener('pointermove',(evt)=>{
+  if(!gizmoDrag) return;
+  const p=canvasCoords(evt);
+  if(gizmoDrag.type==='force'){
+    const f=curForce(); if(!f) return;
+    f.x=Math.round(p.x); f.y=Math.round(p.y);
+    buildForceFields();
+    markDirty();
+    return;
+  }
+  const ec=curEmitter(); if(!ec) return;
+  const es=getEmitterState(ec, simTime);
+  const e=ec.emitter;
+  if(gizmoDrag.type==='center'){
+    const kf=ec.timeline.keyframes[selectedKfIndex];
+    if(kf){ kf.x=Math.round(p.x); kf.y=Math.round(p.y); syncTimelineUI(); }
+  } else if(gizmoDrag.type==='radius'){
+    e.circleRadius=Math.max(2,Math.round(Math.hypot(p.x-es.x,p.y-es.y)));
+    syncEmitterShapeUI();
+  } else if(gizmoDrag.type==='rectcorner'){
+    const rr=-degToRad(es.rot);
+    const dx=p.x-es.x, dy=p.y-es.y;
+    const lx=dx*Math.cos(rr)-dy*Math.sin(rr);
+    const ly=dx*Math.sin(rr)+dy*Math.cos(rr);
+    e.rectW=Math.max(4,Math.round(Math.abs(lx)*2));
+    e.rectH=Math.max(4,Math.round(Math.abs(ly)*2));
+    syncEmitterShapeUI();
+  } else if(gizmoDrag.type==='lineend'){
+    const dx=p.x-es.x, dy=p.y-es.y;
+    e.lineLength=Math.max(2,Math.round(Math.hypot(dx,dy)*2));
+    e.lineAngle=Math.round(radToDeg(Math.atan2(dy,dx))-es.rot);
+    syncEmitterShapeUI();
+  }
+  markDirty();
+});
+window.addEventListener('pointerup',()=>{ gizmoDrag=null; });
+
+/* =========================================================
+   MAIN LOOP
+========================================================= */
+let lastT=performance.now();
+let fpsFrames=0, fpsLast=performance.now();
+
+function frame(now){
+  let dt=(now-lastT)/1000; lastT=now;
+  dt=Math.min(dt,0.05);
+  if(playing){ simTime+=dt; stepSim(dt); }
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save();
+  for(const pt of particles) drawParticle(ctx,pt,pt.src.visuals);
+  ctx.restore();
+  drawGizmo();
+
+  fpsFrames++;
+  if(now-fpsLast>500){
+    document.getElementById('statFps').textContent=Math.round(fpsFrames/((now-fpsLast)/1000));
+    fpsFrames=0; fpsLast=now;
+  }
+  document.getElementById('statParticles').textContent=particles.length;
+  document.getElementById('statEmitters').textContent=cfg.emitters.length;
+
+  redrawCurvesLive();
+  requestAnimationFrame(frame);
+}
+
+/* =========================================================
+   UI: NUMBER FIELD WIDGET
+========================================================= */
+function numField(opts){
+  const {label='', value=0, min=-Infinity, max=Infinity, step=1, unit='', decimals=null, dragScale=1, onChange=()=>{}} = opts;
+  const wrap=document.createElement('div'); wrap.className='field';
+  if(label){ const l=document.createElement('span'); l.className='field-label'; l.textContent=label; wrap.appendChild(l); }
+  const nf=document.createElement('div'); nf.className='numfield';
+  const fill=document.createElement('div'); fill.className='nf-fill';
+  const valSpan=document.createElement('span'); valSpan.className='nf-val';
+  const unitSpan=document.createElement('span'); unitSpan.className='nf-unit'; unitSpan.textContent=unit;
+  nf.appendChild(fill); nf.appendChild(valSpan); nf.appendChild(unitSpan);
+  wrap.appendChild(nf);
+
+  let cur=value;
+  function fmt(v){
+    if(decimals!==null) return v.toFixed(decimals);
+    return (Math.round(v*1000)/1000).toString();
+  }
+  function render(){
+    valSpan.textContent=fmt(cur);
+    if(isFinite(min) && isFinite(max) && max>min){
+      const pct=clamp((cur-min)/(max-min),0,1)*100;
+      fill.style.width=pct+'%';
+    } else fill.style.width='0%';
+  }
+  render();
+
+  const hasRange = isFinite(min) && isFinite(max) && max>min;
+  let dragStartX=0, dragStartY=0, dragStartVal=0, dragged=false;
+  function valueFromClientX(clientX){
+    if(!hasRange) return cur;
+    const rect=nf.getBoundingClientRect();
+    const frac=clamp((clientX-rect.left)/rect.width,0,1);
+    return min + frac*(max-min);
+  }
+  nf.addEventListener('pointerdown',(e)=>{
+    if(e.target.tagName==='INPUT') return;
+    dragStartX=e.clientX; dragStartY=e.clientY; dragStartVal=cur; dragged=false;
+    nf.setPointerCapture(e.pointerId);
+  });
+  nf.addEventListener('pointermove',(e)=>{
+    if(e.buttons!==1) return;
+    const dx=e.clientX-dragStartX, dy=e.clientY-dragStartY;
+    if(!dragged && Math.hypot(dx,dy)>5){ dragged=true; nf.classList.add('dragging'); }
+    if(dragged){
+      let v;
+      if(hasRange){
+        v = valueFromClientX(e.clientX);
+      } else {
+        v = dragStartVal + dx*step*(dragScale*0.2);
+      }
+      v=clamp(Math.round(v/step)*step, min, max);
+      cur=v; render(); onChange(cur);
+    }
+  });
+  nf.addEventListener('pointerup',(e)=>{
+    nf.classList.remove('dragging');
+    if(!dragged) startEdit();
+    dragged=false;
+  });
+  nf.addEventListener('pointercancel',()=>{ nf.classList.remove('dragging'); dragged=false; });
+  function startEdit(){
+    const input=document.createElement('input');
+    input.className='nf-edit'; input.type='number'; input.step=step; input.value=cur;
+    nf.innerHTML=''; nf.appendChild(input); input.focus(); input.select();
+    function commit(){
+      let v=parseFloat(input.value); if(isNaN(v)) v=cur;
+      v=clamp(v,min,max); cur=v;
+      nf.innerHTML=''; nf.appendChild(fill); nf.appendChild(valSpan); nf.appendChild(unitSpan);
+      render(); onChange(cur);
+    }
+    input.addEventListener('blur',commit);
+    input.addEventListener('keydown',(e)=>{ if(e.key==='Enter') input.blur(); if(e.key==='Escape'){input.value=cur; input.blur();} });
+  }
+  return { el:wrap, get value(){return cur;}, set value(v){cur=v; render();} };
+}
+
+function selectField(host, options, value, onChange){
+  const sel=document.createElement('select'); sel.className='sel';
+  for(const o of options){ const op=document.createElement('option'); op.value=o.v; op.textContent=o.l; sel.appendChild(op); }
+  sel.value=value;
+  sel.addEventListener('change',()=>onChange(sel.value));
+  host.appendChild(sel);
+  return sel;
+}
+function colorField(host, label, value, onChange){
+  const wrap=document.createElement('div'); wrap.className='field';
+  if(label){ const l=document.createElement('span'); l.className='field-label'; l.textContent=label; wrap.appendChild(l); }
+  const inp=document.createElement('input'); inp.type='color'; inp.className='colorswatch'; inp.value=value;
+  inp.addEventListener('input',()=>onChange(inp.value));
+  wrap.appendChild(inp);
+  host.appendChild(wrap);
+  return inp;
+}
+
+function markDirty(){ isDirty=true; }
+
+/* =========================================================
+   EMITTERS BAR (list of emitters in the scene)
+========================================================= */
+function startInlineRename(nameEl, currentValue, onCommit){
+  const input=document.createElement('input');
+  input.type='text'; input.className='emchip-name-edit'; input.value=currentValue;
+  nameEl.replaceWith(input);
+  input.focus(); input.select();
+  let done=false;
+  function commit(){
+    if(done) return; done=true;
+    onCommit(input.value);
+  }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'){ e.preventDefault(); input.blur(); }
+    else if(e.key==='Escape'){ done=true; onCommit(null); }
+  });
+  input.addEventListener('pointerdown',(e)=>e.stopPropagation());
+  input.addEventListener('click',(e)=>e.stopPropagation());
+}
+
+function cloneEmitter(ec, indexHint){
+  const plain=JSON.parse(JSON.stringify({
+    name: ec.name+' (kopia)', enabled: ec.enabled,
+    emitter: ec.emitter, physics: ec.physics, visuals: ec.visuals, timeline: ec.timeline
+  }));
+  const clone=buildEmitterFromPartial(plain, indexHint);
+  rebuildCustomTexImage(clone);
+  rebuildCustomMask(clone);
+  return clone;
+}
+
+function rebuildEmittersBar(){
+  const host=document.getElementById('emittersList'); host.innerHTML='';
+  cfg.emitters.forEach((ec,idx)=>{
+    const chip=document.createElement('div');
+    chip.className='emchip'+(idx===selectedEmitterIdx?' selected':'');
+    const dot=document.createElement('span'); dot.className='emchip-dot';
+    dot.style.background=EMITTER_COLORS[idx%EMITTER_COLORS.length];
+    const nameEl=document.createElement('span'); nameEl.className='emchip-name'; nameEl.textContent=ec.name;
+    nameEl.title='Double-click to rename';
+    nameEl.addEventListener('click',(evt)=>evt.stopPropagation());
+    nameEl.addEventListener('dblclick',(evt)=>{
+      evt.stopPropagation();
+      startInlineRename(nameEl, ec.name, (nn)=>{
+        if(nn && nn.trim()){ ec.name=nn.trim(); markDirty(); }
+        rebuildEmittersBar(); refreshBottomLabel();
+      });
+    });
+    const enabledCb=document.createElement('input'); enabledCb.type='checkbox';
+    enabledCb.checked=ec.enabled!==false; enabledCb.title='Active — disabling stops this emitter completely (including as a sub-emitter source). To hide only its own effect, use the option in the Emitter panel.';
+    enabledCb.addEventListener('click',(evt)=>{ evt.stopPropagation(); ec.enabled=enabledCb.checked; markDirty(); });
+    const dupBtn=document.createElement('button'); dupBtn.className='emchip-dup'; dupBtn.textContent='⧉'; dupBtn.title='Duplicate emitter';
+    dupBtn.addEventListener('click',(evt)=>{
+      evt.stopPropagation();
+      const clone=cloneEmitter(ec, cfg.emitters.length);
+      const insertIdx=cfg.emitters.indexOf(ec)+1;
+      cfg.emitters.splice(insertIdx,0,clone);
+      selectedEmitterIdx=insertIdx; selectedKfIndex=0; selectedGradIndex=0;
+      rebuildEmittersBar(); refreshEmitterEditingPanels(); markDirty();
+      showToast('Duplicated emitter: '+ec.name);
+    });
+    const delBtn=document.createElement('button'); delBtn.className='emchip-del'; delBtn.textContent='×'; delBtn.title='Delete emitter';
+    delBtn.addEventListener('click',(evt)=>{
+      evt.stopPropagation();
+      if(cfg.emitters.length<=1){ showToast('At least 1 emitter must remain'); return; }
+      showConfirm('Delete emitter "'+ec.name+'"?', ()=>{
+        const i=cfg.emitters.indexOf(ec);
+        cfg.emitters.splice(i,1);
+        if(selectedEmitterIdx>=cfg.emitters.length) selectedEmitterIdx=cfg.emitters.length-1;
+        rebuildEmittersBar(); refreshEmitterEditingPanels(); markDirty();
+      }, {title:'Delete emitter', okLabel:'Delete'});
+    });
+    chip.appendChild(dot); chip.appendChild(nameEl); chip.appendChild(enabledCb); chip.appendChild(dupBtn); chip.appendChild(delBtn);
+    chip.addEventListener('click',()=>{
+      selectedEmitterIdx=idx; selectedKfIndex=0; selectedGradIndex=0;
+      rebuildEmittersBar(); refreshEmitterEditingPanels();
+    });
+    host.appendChild(chip);
+  });
+}
+document.getElementById('btnAddEmitter').addEventListener('click',()=>{
+  const cx=Math.round(canvas.width/2), cy=Math.round(canvas.height/2);
+  const fitRadius=Math.max(10, Math.min(40, Math.min(canvas.width,canvas.height)*0.25));
+  const ec=buildEmitterFromPartial({
+    name:'Emitter '+(cfg.emitters.length+1),
+    emitter:{ circleRadius: Math.round(fitRadius) },
+    timeline:{ keyframes:[{t:0,x:cx,y:cy,rot:0,mult:1}] }
+  }, cfg.emitters.length);
+  cfg.emitters.push(ec);
+  selectedEmitterIdx=cfg.emitters.length-1;
+  rebuildEmittersBar(); refreshEmitterEditingPanels(); markDirty();
+  showToast('New emitter added');
+});
+function refreshBottomLabel(){
+  const ec=curEmitter();
+  document.getElementById('bottomTabsEmName').textContent = ec ? ec.name : '—';
+}
+
+/* =========================================================
+   FORCES LIST + EDITOR
+========================================================= */
+function rebuildForcesList(){
+  const host=document.getElementById('forcesListHost'); host.innerHTML='';
+  cfg.forces.forEach((f,idx)=>{
+    const chip=document.createElement('div');
+    chip.className='emchip'+(idx===selectedForceIdx?' selected':'');
+    const dot=document.createElement('span'); dot.className='emchip-dot';
+    dot.style.background = f.mode==='repel' ? '#ff4d6d' : f.mode==='directional' ? '#3ddbff' : '#4ade80';
+    const nameEl=document.createElement('span'); nameEl.className='emchip-name'; nameEl.textContent=f.name;
+    nameEl.title='Double-click to rename';
+    nameEl.addEventListener('click',(evt)=>evt.stopPropagation());
+    nameEl.addEventListener('dblclick',(evt)=>{
+      evt.stopPropagation();
+      startInlineRename(nameEl, f.name, (nn)=>{
+        if(nn && nn.trim()){ f.name=nn.trim(); markDirty(); }
+        rebuildForcesList();
+      });
+    });
+    const enabledCb=document.createElement('input'); enabledCb.type='checkbox';
+    enabledCb.checked=f.enabled!==false; enabledCb.title='Active';
+    enabledCb.addEventListener('click',(evt)=>{ evt.stopPropagation(); f.enabled=enabledCb.checked; markDirty(); });
+    const delBtn=document.createElement('button'); delBtn.className='emchip-del'; delBtn.textContent='×'; delBtn.title='Delete';
+    delBtn.addEventListener('click',(evt)=>{
+      evt.stopPropagation();
+      cfg.forces.splice(idx,1);
+      if(selectedForceIdx>=cfg.forces.length) selectedForceIdx=cfg.forces.length-1;
+      rebuildForcesList(); buildForceFields(); markDirty();
+    });
+    chip.appendChild(dot); chip.appendChild(nameEl); chip.appendChild(enabledCb); chip.appendChild(delBtn);
+    chip.addEventListener('click',()=>{ selectedForceIdx=idx; rebuildForcesList(); buildForceFields(); });
+    host.appendChild(chip);
+  });
+}
+function buildForceFields(){
+  const host=document.getElementById('forceFieldsHost'); host.innerHTML='';
+  const f=curForce();
+  if(!f){ host.innerHTML='<div class="hint">No force fields yet. Add one with the button above.</div>'; return; }
+
+  const shapeHost=document.createElement('div'); shapeHost.className='field';
+  const sl=document.createElement('span'); sl.className='field-label'; sl.textContent='Area shape'; shapeHost.appendChild(sl);
+  selectField(shapeHost,[{v:'circle',l:'Circle (radius)'},{v:'rect',l:'Rectangle (area)'}], f.shape||'circle', v=>{f.shape=v; markDirty(); buildForceFields();});
+  host.appendChild(shapeHost);
+
+  const modeHost=document.createElement('div'); modeHost.className='field';
+  const l=document.createElement('span'); l.className='field-label'; l.textContent='Mode'; modeHost.appendChild(l);
+  selectField(modeHost,[{v:'attract',l:'Attract (attractor)'},{v:'repel',l:'Repel (repulsor)'},{v:'directional',l:'Directional (wind)'}], f.mode, v=>{f.mode=v; rebuildForcesList(); markDirty(); buildForceFields();});
+  host.appendChild(modeHost);
+
+  const row1=document.createElement('div'); row1.className='row';
+  row1.appendChild(numField({label:'Position X', value:f.x, min:0,max:4096,step:1,unit:'px', onChange:v=>{f.x=v; markDirty();}}).el);
+  row1.appendChild(numField({label:'Position Y', value:f.y, min:0,max:4096,step:1,unit:'px', onChange:v=>{f.y=v; markDirty();}}).el);
+  host.appendChild(row1);
+
+  if((f.shape||'circle')==='circle'){
+    const row2=document.createElement('div'); row2.className='row';
+    row2.appendChild(numField({label:'Strength', value:f.strength, min:0,max:3000,step:5,unit:'px/s²', onChange:v=>{f.strength=v; markDirty();}}).el);
+    row2.appendChild(numField({label:'Range radius (0=unlimited)', value:f.radius, min:0,max:2000,step:5,unit:'px', onChange:v=>{f.radius=v; markDirty();}}).el);
+    host.appendChild(row2);
+  } else {
+    const row2=document.createElement('div'); row2.className='row';
+    row2.appendChild(numField({label:'Area width', value:f.width, min:10,max:3000,step:5,unit:'px', onChange:v=>{f.width=v; markDirty();}}).el);
+    row2.appendChild(numField({label:'Area height', value:f.height, min:10,max:3000,step:5,unit:'px', onChange:v=>{f.height=v; markDirty();}}).el);
+    host.appendChild(row2);
+    const row3=document.createElement('div'); row3.className='row';
+    row3.appendChild(numField({label:'Strength', value:f.strength, min:0,max:3000,step:5,unit:'px/s²', onChange:v=>{f.strength=v; markDirty();}}).el);
+    host.appendChild(row3);
+  }
+
+  if(f.mode==='directional' || f.shape==='rect'){
+    const row4=document.createElement('div'); row4.className='row';
+    row4.appendChild(numField({label: f.mode==='directional' ? 'Wind direction angle' : 'Area rotation', value:f.angle||0, min:-360,max:360,step:1,unit:'°', onChange:v=>{f.angle=v; markDirty();}}).el);
+    host.appendChild(row4);
+  }
+}
+document.getElementById('btnAddForce').addEventListener('click',()=>{
+  const cx=Math.round(canvas.width/2), cy=Math.round(canvas.height/2);
+  const minDim=Math.min(canvas.width,canvas.height);
+  const fitRadius=Math.max(20, Math.min(150, minDim*0.35));
+  const fitW=Math.max(40, Math.min(200, canvas.width*0.4));
+  const fitH=Math.max(30, Math.min(100, canvas.height*0.35));
+  const f=buildForceFromPartial({
+    name:'Force '+(cfg.forces.length+1), x:cx, y:cy,
+    radius:Math.round(fitRadius), width:Math.round(fitW), height:Math.round(fitH)
+  }, cfg.forces.length);
+  cfg.forces.push(f);
+  selectedForceIdx=cfg.forces.length-1;
+  rebuildForcesList(); buildForceFields(); markDirty();
+  showToast('Force field added');
+});
+
+/* =========================================================
+   BUILD SIDEBAR PANELS (operate on selected emitter)
+========================================================= */
+function buildEmitterPanel(){
+  const ec=curEmitter(); if(!ec) return;
+  const host=document.getElementById('shapeParamsHost'); host.innerHTML='';
+  const e=ec.emitter;
+  document.getElementById('em_shape').value=e.shape;
+
+  if(e.shape==='line'){
+    const row=document.createElement('div'); row.className='row';
+    row.appendChild(numField({label:'Length', value:e.lineLength, min:2,max:2000,step:1,unit:'px', onChange:v=>{e.lineLength=v; markDirty();}}).el);
+    row.appendChild(numField({label:'Angle', value:e.lineAngle, min:-360,max:360,step:1,unit:'°', onChange:v=>{e.lineAngle=v; markDirty();}}).el);
+    host.appendChild(row);
+  } else if(e.shape==='circle'){
+    const row=document.createElement('div'); row.className='row';
+    row.appendChild(numField({label:'Radius', value:e.circleRadius, min:1,max:1000,step:1,unit:'px', onChange:v=>{e.circleRadius=v; markDirty();}}).el);
+    host.appendChild(row);
+    const fillHost=document.createElement('div'); fillHost.className='field';
+    const l=document.createElement('span'); l.className='field-label'; l.textContent='Fill'; fillHost.appendChild(l);
+    selectField(fillHost,[{v:'true',l:'Filled disc'},{v:'false',l:'Outline only (ring)'}], String(e.circleFill), v=>{e.circleFill=(v==='true'); markDirty();});
+    host.appendChild(fillHost);
+  } else if(e.shape==='rect'){
+    const row=document.createElement('div'); row.className='row';
+    row.appendChild(numField({label:'Width', value:e.rectW, min:2,max:2000,step:1,unit:'px', onChange:v=>{e.rectW=v; markDirty();}}).el);
+    row.appendChild(numField({label:'Height', value:e.rectH, min:2,max:2000,step:1,unit:'px', onChange:v=>{e.rectH=v; markDirty();}}).el);
+    host.appendChild(row);
+  } else if(e.shape==='custom'){
+    const btn=document.createElement('button'); btn.className='btn-sm'; btn.textContent='Upload mask image (PNG/SVG)'; btn.style.marginBottom='8px';
+    const input=document.createElement('input'); input.type='file'; input.accept='image/*'; input.className='file-input-hidden';
+    btn.addEventListener('click',()=>input.click());
+    input.addEventListener('change',()=>{
+      const f=input.files[0]; if(!f) return;
+      const reader=new FileReader();
+      reader.onload=()=>{ e.customMaskImage=reader.result; rebuildCustomMask(ec); markDirty(); showToast('Emitter mask uploaded'); };
+      reader.readAsDataURL(f);
+    });
+    host.appendChild(btn); host.appendChild(input);
+    const row=document.createElement('div'); row.className='row';
+    row.appendChild(numField({label:'Size', value:e.customMaskSize, min:4,max:1000,step:1,unit:'px', onChange:v=>{e.customMaskSize=v; markDirty();}}).el);
+    host.appendChild(row);
+  }
+
+  const modeHost=document.getElementById('emitModeHost'); modeHost.innerHTML='';
+  document.getElementById('em_mode').value=e.mode;
+  if(e.mode==='continuous'){
+    const row=document.createElement('div'); row.className='row';
+    row.appendChild(numField({label:'Rate', value:e.rate, min:0,max:2000,step:1,unit:'/s', onChange:v=>{e.rate=v; markDirty();}}).el);
+    modeHost.appendChild(row);
+  } else {
+    const row=document.createElement('div'); row.className='row';
+    row.appendChild(numField({label:'Particles per burst', value:e.burstCount, min:1,max:2000,step:1, onChange:v=>{e.burstCount=v; markDirty();}}).el);
+    row.appendChild(numField({label:'Interval', value:e.burstInterval, min:0.02,max:20,step:0.05,unit:'s', onChange:v=>{e.burstInterval=v; markDirty();}}).el);
+    modeHost.appendChild(row);
+  }
+
+  const asHost=document.getElementById('em_angleSpreadHost'); asHost.innerHTML='';
+  const asHint=document.getElementById('em_angleSpreadHint');
+  function refreshAngleSpreadHint(){
+    if(e.relativeAngle){
+      asHint.textContent='Direction is calculated separately for each particle: from the emitter\u2019s center through its spawn point (outward). The \u201cDirection angle\u201d field is ignored. Spawn positions always sample the whole shape; \u201cSpread\u201d only adds a small random deviation from the outward direction (0\u00b0 = perfectly radial).';
+    } else if(e.shape==='circle' && e.spread<180){
+      asHint.textContent='With a spread under 180°, particles only spawn from an arc of the circle/ring around the direction angle — not the whole shape.';
+    } else {
+      asHint.textContent='';
+    }
+  }
+  asHost.appendChild(numField({label:'Direction angle', value:e.angle, min:-360,max:360,step:1,unit:'°', onChange:v=>{e.angle=v; markDirty(); refreshAngleSpreadHint();}}).el);
+  asHost.appendChild(numField({label:'Spread (±)', value:e.spread, min:0,max:180,step:1,unit:'°', onChange:v=>{e.spread=v; markDirty(); refreshAngleSpreadHint();}}).el);
+  document.getElementById('em_relativeAngle').checked=!!e.relativeAngle;
+  document.getElementById('em_relativeAngle').onchange=(ev)=>{ e.relativeAngle=ev.target.checked; markDirty(); refreshAngleSpreadHint(); };
+  refreshAngleSpreadHint();
+
+  const ltHost=document.getElementById('em_lifetimeHost'); ltHost.innerHTML='';
+  ltHost.appendChild(numField({label:'Min', value:e.lifetimeMin, min:0.05,max:30,step:0.05,unit:'s', onChange:v=>{e.lifetimeMin=Math.min(v,e.lifetimeMax); markDirty();}}).el);
+  ltHost.appendChild(numField({label:'Max', value:e.lifetimeMax, min:0.05,max:30,step:0.05,unit:'s', onChange:v=>{e.lifetimeMax=Math.max(v,e.lifetimeMin); markDirty();}}).el);
+
+  const sdHost=document.getElementById('em_startDelayHost'); sdHost.innerHTML='';
+  sdHost.appendChild(numField({label:'Start delay', value:e.startDelay||0, min:0,max:60,step:0.1,unit:'s', onChange:v=>{e.startDelay=v; markDirty();}}).el);
+
+  document.getElementById('se_enabled').checked=e.subEmitter.enabled;
+  document.getElementById('se_enabled').onchange=(ev)=>{ e.subEmitter.enabled=ev.target.checked; markDirty(); buildSubEmitterFields(ec); };
+  buildSubEmitterFields(ec);
+  buildTargetedByHost(ec);
+}
+function buildTargetedByHost(ec){
+  const host=document.getElementById('targetedByHost'); host.innerHTML='';
+  const names=getTargetingEmitterNames(ec);
+  if(names.length===0) return;
+  const box=document.createElement('div'); box.className='subtle-box';
+  const title=document.createElement('div'); title.className='section-title'; title.style.marginTop='4px';
+  title.textContent='Used as a sub-emitter target'; box.appendChild(title);
+  const hint=document.createElement('div'); hint.className='hint'; hint.style.marginBottom='8px';
+  hint.textContent='This emitter is a template for: '+names.join(', ')+'. By default it no longer generates its own independent effect at its own position — it only acts as a template triggered by the events of the emitters above. This works regardless of the state of the \u201cActive\u201d checkbox in the emitter list.';
+  box.appendChild(hint);
+  const label=document.createElement('label'); label.className='checkrow';
+  const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!!ec.emitter.forceIndependentEmission;
+  cb.addEventListener('change',()=>{ ec.emitter.forceIndependentEmission=cb.checked; markDirty(); });
+  label.appendChild(cb); label.appendChild(document.createTextNode(' Also emit independently at its own position'));
+  box.appendChild(label);
+  host.appendChild(box);
+}
+function buildSubEmitterFields(ec){
+  const e=ec.emitter;
+  const host=document.getElementById('subEmitterHost'); host.innerHTML='';
+  if(!e.subEmitter.enabled) return;
+
+  const modeHost=document.createElement('div'); modeHost.className='field';
+  const l1=document.createElement('span'); l1.className='field-label'; l1.textContent='Zdarzenie'; modeHost.appendChild(l1);
+  selectField(modeHost,[{v:'deathBurst',l:'On death (Death Burst)'},{v:'trail',l:'Trail during lifetime'}], e.subEmitter.mode, v=>{e.subEmitter.mode=v; markDirty(); buildSubEmitterFields(ec);});
+  host.appendChild(modeHost);
+
+  const targetHost=document.createElement('div'); targetHost.className='field';
+  const l2=document.createElement('span'); l2.className='field-label'; l2.textContent='Emitter docelowy (szablon particles)'; targetHost.appendChild(l2);
+  const options=cfg.emitters.filter(x=>x.id!==ec.id).map(x=>({v:x.id, l:x.name}));
+  if(options.length===0){
+    const hint=document.createElement('div'); hint.className='hint'; hint.textContent='Add at least one other emitter to use as a sub-emitter target.';
+    targetHost.appendChild(hint);
+  } else {
+    if(!e.subEmitter.targetEmitterId || !options.find(o=>o.v===e.subEmitter.targetEmitterId)){
+      e.subEmitter.targetEmitterId=options[0].v;
+    }
+    selectField(targetHost, options, e.subEmitter.targetEmitterId, v=>{e.subEmitter.targetEmitterId=v; markDirty();});
+  }
+  host.appendChild(targetHost);
+
+  if(e.subEmitter.mode==='deathBurst'){
+    const row=document.createElement('div'); row.className='row';
+    row.appendChild(numField({label:'Particles on death', value:e.subEmitter.burstCount, min:1,max:100,step:1, onChange:v=>{e.subEmitter.burstCount=v; markDirty();}}).el);
+    host.appendChild(row);
+  } else {
+    const row=document.createElement('div'); row.className='row';
+    row.appendChild(numField({label:'Trail interval', value:e.subEmitter.trailInterval, min:0.01,max:1,step:0.01,unit:'s', onChange:v=>{e.subEmitter.trailInterval=v; markDirty();}}).el);
+    host.appendChild(row);
+  }
+}
+function syncEmitterShapeUI(){ buildEmitterPanel(); }
+
+function buildPhysicsPanel(){
+  const ec=curEmitter(); if(!ec) return;
+  const p=ec.physics;
+  const speedHost=document.getElementById('ph_speedHost'); speedHost.innerHTML='';
+  speedHost.appendChild(numField({label:'Speed min', value:p.speedMin, min:0,max:3000,step:1,unit:'px/s', onChange:v=>{p.speedMin=Math.min(v,p.speedMax); markDirty();}}).el);
+  speedHost.appendChild(numField({label:'Speed max', value:p.speedMax, min:0,max:3000,step:1,unit:'px/s', onChange:v=>{p.speedMax=Math.max(v,p.speedMin); markDirty();}}).el);
+
+  const accelHost=document.getElementById('ph_accelHost'); accelHost.innerHTML='';
+  accelHost.appendChild(numField({label:'Acceleration', value:p.accel, min:-2000,max:2000,step:1,unit:'px/s²', onChange:v=>{p.accel=v; markDirty();}}).el);
+  accelHost.appendChild(numField({label:'Max speed (0=none)', value:p.maxSpeed, min:0,max:5000,step:1,unit:'px/s', onChange:v=>{p.maxSpeed=v; markDirty();}}).el);
+
+  const gravHost=document.getElementById('ph_gravHost'); gravHost.innerHTML='';
+  gravHost.appendChild(numField({label:'X', value:p.gravityX, min:-2000,max:2000,step:1,unit:'px/s²', onChange:v=>{p.gravityX=v; markDirty();}}).el);
+  gravHost.appendChild(numField({label:'Y', value:p.gravityY, min:-2000,max:2000,step:1,unit:'px/s²', onChange:v=>{p.gravityY=v; markDirty();}}).el);
+
+  const windHost=document.getElementById('ph_windHost'); windHost.innerHTML='';
+  windHost.appendChild(numField({label:'X', value:p.windX, min:-2000,max:2000,step:1,unit:'px/s²', onChange:v=>{p.windX=v; markDirty();}}).el);
+  windHost.appendChild(numField({label:'Y', value:p.windY, min:-2000,max:2000,step:1,unit:'px/s²', onChange:v=>{p.windY=v; markDirty();}}).el);
+
+  const vortexHost=document.getElementById('ph_vortexHost'); vortexHost.innerHTML='';
+  vortexHost.appendChild(numField({label:'Radial', value:p.radialAccel, min:-2000,max:2000,step:1,unit:'px/s²', onChange:v=>{p.radialAccel=v; markDirty();}}).el);
+  vortexHost.appendChild(numField({label:'Tangential', value:p.tangentialAccel, min:-2000,max:2000,step:1,unit:'px/s²', onChange:v=>{p.tangentialAccel=v; markDirty();}}).el);
+
+  document.getElementById('ph_noiseEnabled').checked=p.noiseEnabled;
+  document.getElementById('ph_noiseEnabled').onchange=(ev)=>{p.noiseEnabled=ev.target.checked; markDirty();};
+  const noiseHost=document.getElementById('ph_noiseHost'); noiseHost.innerHTML='';
+  noiseHost.appendChild(numField({label:'Strength', value:p.noiseStrength, min:0,max:500,step:5,unit:'px/s²', onChange:v=>{p.noiseStrength=v; markDirty();}}).el);
+  noiseHost.appendChild(numField({label:'Skala', value:p.noiseScale, min:0.001,max:0.2,step:0.001,decimals:3, onChange:v=>{p.noiseScale=v; markDirty();}}).el);
+  noiseHost.appendChild(numField({label:'Change speed', value:p.noiseSpeed, min:0,max:5,step:0.05, onChange:v=>{p.noiseSpeed=v; markDirty();}}).el);
+
+  document.getElementById('ph_collEnabled').checked=p.collisionEnabled;
+  document.getElementById('ph_collEnabled').onchange=(e)=>{p.collisionEnabled=e.target.checked; markDirty();};
+  const collHost=document.getElementById('ph_collHost'); collHost.innerHTML='';
+  collHost.appendChild(numField({label:'Floor level Y', value:p.floorY, min:0,max:2000,step:1,unit:'px', onChange:v=>{p.floorY=v; markDirty();}}).el);
+  collHost.appendChild(numField({label:'Bounce', value:p.bounce, min:0,max:1,step:0.05, onChange:v=>{p.bounce=v; markDirty();}}).el);
+}
+
+function buildVisualsPanel(){
+  const ec=curEmitter(); if(!ec) return;
+  const v=ec.visuals;
+  document.getElementById('vs_texture').value=v.texture;
+  document.getElementById('vs_blend').value=v.blend;
+
+  const texHost=document.getElementById('vs_customTexHost'); texHost.innerHTML='';
+  const animHost=document.getElementById('vs_animatedHost'); animHost.innerHTML='';
+  if(v.texture==='custom'){
+    const btn=document.createElement('button'); btn.className='btn-sm'; btn.textContent='Upload texture (PNG)'; btn.style.marginBottom='8px';
+    const input=document.createElement('input'); input.type='file'; input.accept='image/*'; input.className='file-input-hidden';
+    btn.addEventListener('click',()=>input.click());
+    input.addEventListener('change',()=>{
+      const f=input.files[0]; if(!f) return;
+      const reader=new FileReader();
+      reader.onload=()=>{ v.customTextureImage=reader.result; rebuildCustomTexImage(ec); markDirty(); showToast('Texture uploaded'); };
+      reader.readAsDataURL(f);
+    });
+    texHost.appendChild(btn); texHost.appendChild(input);
+
+    const box=document.createElement('div'); box.className='subtle-box';
+    const cbLabel=document.createElement('label'); cbLabel.className='checkrow'; cbLabel.style.marginBottom='6px';
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=v.customTextureAnimated.enabled;
+    cbLabel.appendChild(cb); cbLabel.appendChild(document.createTextNode(' Animated texture (spritesheet)'));
+    box.appendChild(cbLabel);
+    const animFieldsHost=document.createElement('div');
+    box.appendChild(animFieldsHost);
+    cb.addEventListener('change',()=>{ v.customTextureAnimated.enabled=cb.checked; markDirty(); renderAnimFields(); });
+    function renderAnimFields(){
+      animFieldsHost.innerHTML='';
+      if(!v.customTextureAnimated.enabled) return;
+      const row=document.createElement('div'); row.className='row';
+      row.appendChild(numField({label:'Columns', value:v.customTextureAnimated.cols, min:1,max:16,step:1, onChange:val=>{v.customTextureAnimated.cols=val; markDirty();}}).el);
+      row.appendChild(numField({label:'Rows', value:v.customTextureAnimated.rows, min:1,max:16,step:1, onChange:val=>{v.customTextureAnimated.rows=val; markDirty();}}).el);
+      animFieldsHost.appendChild(row);
+      const modeHost=document.createElement('div'); modeHost.className='field';
+      const l=document.createElement('span'); l.className='field-label'; l.textContent='Playback mode'; modeHost.appendChild(l);
+      selectField(modeHost,[{v:'loop',l:'Loop'},{v:'once',l:'Once (over lifetime)'},{v:'random',l:'Random frame (static)'}], v.customTextureAnimated.mode, val=>{v.customTextureAnimated.mode=val; markDirty(); renderAnimFields();});
+      animFieldsHost.appendChild(modeHost);
+      if(v.customTextureAnimated.mode==='loop'){
+        const row2=document.createElement('div'); row2.className='row';
+        row2.appendChild(numField({label:'Loops over lifetime', value:v.customTextureAnimated.loops, min:0.1,max:20,step:0.1, onChange:val=>{v.customTextureAnimated.loops=val; markDirty();}}).el);
+        animFieldsHost.appendChild(row2);
+      }
+    }
+    renderAnimFields();
+    animHost.appendChild(box);
+  }
+
+  const sizeHost=document.getElementById('vs_sizeHost'); sizeHost.innerHTML='';
+  sizeHost.appendChild(numField({label:'Min', value:v.sizeMin, min:0.5,max:400,step:0.5,unit:'px', onChange:val=>{v.sizeMin=Math.min(val,v.sizeMax); markDirty();}}).el);
+  sizeHost.appendChild(numField({label:'Max', value:v.sizeMax, min:0.5,max:400,step:0.5,unit:'px', onChange:val=>{v.sizeMax=Math.max(val,v.sizeMin); markDirty();}}).el);
+
+  const rotInitHost=document.getElementById('vs_rotInitHost'); rotInitHost.innerHTML='';
+  rotInitHost.appendChild(numField({label:'Initial rotation min', value:v.rotInitMin, min:-720,max:720,step:1,unit:'°', onChange:val=>{v.rotInitMin=val; markDirty();}}).el);
+  rotInitHost.appendChild(numField({label:'Initial rotation max', value:v.rotInitMax, min:-720,max:720,step:1,unit:'°', onChange:val=>{v.rotInitMax=val; markDirty();}}).el);
+
+  const rotSpeedHost=document.getElementById('vs_rotSpeedHost'); rotSpeedHost.innerHTML='';
+  rotSpeedHost.appendChild(numField({label:'Rotation speed min', value:v.rotSpeedMin, min:-1440,max:1440,step:1,unit:'°/s', onChange:val=>{v.rotSpeedMin=val; markDirty();}}).el);
+  rotSpeedHost.appendChild(numField({label:'Rotation speed max', value:v.rotSpeedMax, min:-1440,max:1440,step:1,unit:'°/s', onChange:val=>{v.rotSpeedMax=val; markDirty();}}).el);
+
+  document.getElementById('vs_align').checked=v.alignToDirection;
+  document.getElementById('vs_align').onchange=(e)=>{v.alignToDirection=e.target.checked; markDirty();};
+
+  document.getElementById('vs_colorRandEnabled').checked=v.colorRandomize.enabled;
+  document.getElementById('vs_colorRandEnabled').onchange=(e)=>{v.colorRandomize.enabled=e.target.checked; markDirty(); buildVisualsPanel();};
+  const crHost=document.getElementById('vs_colorRandHost'); crHost.innerHTML='';
+  if(v.colorRandomize.enabled){
+    colorField(crHost,'Color A', v.colorRandomize.colorA, val=>{v.colorRandomize.colorA=val; markDirty();});
+    colorField(crHost,'Color B', v.colorRandomize.colorB, val=>{v.colorRandomize.colorB=val; markDirty();});
+  }
+}
+
+document.getElementById('em_shape').addEventListener('change',(e)=>{curEmitter().emitter.shape=e.target.value; markDirty(); buildEmitterPanel();});
+document.getElementById('em_mode').addEventListener('change',(e)=>{curEmitter().emitter.mode=e.target.value; markDirty(); buildEmitterPanel();});
+document.getElementById('vs_texture').addEventListener('change',(e)=>{curEmitter().visuals.texture=e.target.value; markDirty(); buildVisualsPanel();});
+document.getElementById('vs_blend').addEventListener('change',(e)=>{curEmitter().visuals.blend=e.target.value; markDirty();});
+
+/* =========================================================
+   TABS
+========================================================= */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='forces'){ rebuildForcesList(); buildForceFields(); }
+  });
+});
+document.querySelectorAll('.btab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.btab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.bpanel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('bpanel-'+btn.dataset.btab).classList.add('active');
+  });
+});
+
+/* =========================================================
+   CURVE EDITOR WIDGET (operates on selected emitter's curves)
+========================================================= */
+function makeCurveEditor(canvasEl, curveRefGetter, color, ageSampleFn){
+  let drag=null;
+  function resize(){
+    const rect=canvasEl.getBoundingClientRect();
+    canvasEl.width=Math.max(160,rect.width);
+    canvasEl.height=Math.max(90,rect.height);
+  }
+  function toLocal(evt){
+    const r=canvasEl.getBoundingClientRect();
+    const x=(evt.clientX-r.left)/r.width;
+    const y=1-(evt.clientY-r.top)/r.height;
+    return {t:clamp(x,0,1), v:clamp(y,0,1.2)};
+  }
+  function draw(){
+    const w=canvasEl.width, h=canvasEl.height;
+    const c=canvasEl.getContext('2d');
+    c.clearRect(0,0,w,h);
+    c.strokeStyle='rgba(255,255,255,0.06)';
+    c.lineWidth=1;
+    for(let i=1;i<4;i++){ const y=h*i/4; c.beginPath(); c.moveTo(0,y); c.lineTo(w,y); c.stroke(); }
+    for(let i=1;i<4;i++){ const x=w*i/4; c.beginPath(); c.moveTo(x,0); c.lineTo(x,h); c.stroke(); }
+
+    const curve=sortCurve(curveRefGetter());
+    if(ageSampleFn){
+      c.strokeStyle='rgba(255,255,255,0.12)';
+      for(const ageN of ageSampleFn()){
+        const x=ageN*w;
+        c.beginPath(); c.moveTo(x,0); c.lineTo(x,h); c.stroke();
+      }
+    }
+    c.strokeStyle=color; c.lineWidth=2;
+    c.beginPath();
+    for(let i=0;i<curve.length;i++){
+      const x=curve[i].t*w, y=h-clamp(curve[i].v,0,1.2)/1.2*h;
+      if(i===0) c.moveTo(x,y); else c.lineTo(x,y);
+    }
+    c.stroke();
+    for(const pt of curve){
+      const x=pt.t*w, y=h-clamp(pt.v,0,1.2)/1.2*h;
+      c.beginPath(); c.arc(x,y,5,0,Math.PI*2);
+      c.fillStyle= (drag && drag.pt===pt) ? '#fff' : color;
+      c.fill();
+      c.strokeStyle='#0a0d12'; c.lineWidth=1.5; c.stroke();
+    }
+  }
+  canvasEl.addEventListener('dblclick',(evt)=>{
+    const loc=toLocal(evt);
+    const val=loc.v*1.2;
+    const curve=curveRefGetter();
+    curve.push({t:loc.t,v:clamp(val,0,1.2)});
+    sortCurve(curve); draw(); markDirty();
+  });
+  canvasEl.addEventListener('contextmenu',(evt)=>{
+    evt.preventDefault();
+    const curve=curveRefGetter();
+    if(curve.length<=2) return;
+    const w=canvasEl.width,h=canvasEl.height;
+    const r=canvasEl.getBoundingClientRect();
+    const mx=(evt.clientX-r.left)/r.width*w, my=(evt.clientY-r.top)/r.height*h;
+    let closest=null, cd=Infinity;
+    for(const pt of curve){
+      const x=pt.t*w, y=h-clamp(pt.v,0,1.2)/1.2*h;
+      const d=Math.hypot(x-mx,y-my);
+      if(d<cd){cd=d; closest=pt;}
+    }
+    if(closest && cd<20){
+      const idx=curve.indexOf(closest); curve.splice(idx,1); draw(); markDirty();
+    }
+  });
+  canvasEl.addEventListener('pointerdown',(evt)=>{
+    const w=canvasEl.width,h=canvasEl.height;
+    const r=canvasEl.getBoundingClientRect();
+    const mx=(evt.clientX-r.left)/r.width*w, my=(evt.clientY-r.top)/r.height*h;
+    const curve=curveRefGetter();
+    let closest=null, cd=Infinity;
+    for(const pt of curve){
+      const x=pt.t*w, y=h-clamp(pt.v,0,1.2)/1.2*h;
+      const d=Math.hypot(x-mx,y-my);
+      if(d<cd){cd=d; closest=pt;}
+    }
+    if(closest && cd<16){ drag={pt:closest}; canvasEl.setPointerCapture(evt.pointerId); }
+  });
+  canvasEl.addEventListener('pointermove',(evt)=>{
+    if(!drag) return;
+    const loc=toLocal(evt);
+    const curve=curveRefGetter();
+    const isEndpoint = drag.pt===curve[0] || drag.pt===curve[curve.length-1];
+    if(!isEndpoint || curve.length===1){
+      drag.pt.t=loc.t;
+    } else if(drag.pt===curve[0]){ drag.pt.t=0; } else { drag.pt.t=1; }
+    drag.pt.v=clamp(loc.v*1.2,0,1.2);
+    draw(); markDirty();
+  });
+  canvasEl.addEventListener('pointerup',()=>{ drag=null; sortCurve(curveRefGetter()); });
+  resize();
+  window.addEventListener('resize',()=>{resize(); draw();});
+  return {draw, resize};
+}
+
+let curveAgeSampler=()=>particles.filter((p,i)=>i%6===0 && p.src===curEmitter()).map(p=>clamp(p.age/p.maxLife,0,1));
+
+const ceSize=makeCurveEditor(document.getElementById('curveSize'), ()=>curEmitter().visuals.sizeCurve, '#ff5c3d', curveAgeSampler);
+const ceAlpha=makeCurveEditor(document.getElementById('curveAlpha'), ()=>curEmitter().visuals.alphaCurve, '#3ddbff', curveAgeSampler);
+const ceSpeed=makeCurveEditor(document.getElementById('curveSpeed'), ()=>curEmitter().visuals.speedCurve, '#b47bff', curveAgeSampler);
+const ceScaleX=makeCurveEditor(document.getElementById('curveScaleX'), ()=>curEmitter().visuals.scaleXCurve, '#4ade80', curveAgeSampler);
+const ceScaleY=makeCurveEditor(document.getElementById('curveScaleY'), ()=>curEmitter().visuals.scaleYCurve, '#ffd93d', curveAgeSampler);
+
+function redrawCurvesLive(){
+  const activeB=document.querySelector('.btab-btn.active').dataset.btab;
+  if(activeB==='curves'){ ceSize.draw(); ceAlpha.draw(); ceSpeed.draw(); ceScaleX.draw(); ceScaleY.draw(); }
+  if(activeB==='gradient'){ drawGradientBar(); }
+  if(activeB==='timeline'){ drawTimeline(); }
+}
+
+/* =========================================================
+   GRADIENT PICKER (selected emitter)
+========================================================= */
+const gradCanvas=document.getElementById('gradCanvas');
+const gradStopsHost=document.getElementById('gradStops');
+const gradColorHost=document.getElementById('gradColorHost');
+
+function drawGradientBar(){
+  const ec=curEmitter(); if(!ec) return;
+  const w=gradCanvas.width=gradCanvas.getBoundingClientRect().width;
+  const h=gradCanvas.height=34;
+  const c=gradCanvas.getContext('2d');
+  const stops=sortGradient(ec.visuals.gradient);
+  const g=c.createLinearGradient(0,0,w,0);
+  for(const s of stops) g.addColorStop(clamp(s.pos,0,1), s.color);
+  c.fillStyle='#000'; c.fillRect(0,0,w,h);
+  c.fillStyle=g; c.fillRect(0,0,w,h);
+  renderGradStopMarkers();
+}
+function renderGradStopMarkers(){
+  const ec=curEmitter(); if(!ec) return;
+  gradStopsHost.innerHTML='';
+  const stops=ec.visuals.gradient;
+  const w=gradCanvas.getBoundingClientRect().width;
+  stops.forEach((s,idx)=>{
+    const m=document.createElement('div');
+    m.className='grad-stop'+(idx===selectedGradIndex?' selected':'');
+    m.style.left=(s.pos*w)+'px';
+    m.style.background=s.color;
+    m.addEventListener('pointerdown',(evt)=>{
+      selectedGradIndex=idx; renderGradStopMarkers(); updateGradColorInput();
+      const startX=evt.clientX; const startPos=s.pos;
+      function move(e2){
+        const dx=e2.clientX-startX;
+        s.pos=clamp(startPos+dx/w,0,1);
+        drawGradientBar(); markDirty();
+      }
+      function up(){ window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); sortGradient(stops); renderGradStopMarkers(); }
+      window.addEventListener('pointermove',move); window.addEventListener('pointerup',up);
+    });
+    gradStopsHost.appendChild(m);
+  });
+}
+function updateGradColorInput(){
+  const ec=curEmitter(); if(!ec) return;
+  gradColorHost.innerHTML='';
+  const stop=ec.visuals.gradient[selectedGradIndex];
+  if(!stop) return;
+  const inp=document.createElement('input'); inp.type='color'; inp.className='colorswatch'; inp.value=stop.color;
+  inp.addEventListener('input',()=>{ stop.color=inp.value; drawGradientBar(); markDirty(); });
+  gradColorHost.appendChild(inp);
+}
+gradCanvas.addEventListener('dblclick',(evt)=>{
+  const ec=curEmitter(); if(!ec) return;
+  const r=gradCanvas.getBoundingClientRect();
+  const pos=clamp((evt.clientX-r.left)/r.width,0,1);
+  const color=sampleGradient(ec.visuals.gradient,pos);
+  const newStop={pos,color};
+  ec.visuals.gradient.push(newStop);
+  sortGradient(ec.visuals.gradient);
+  selectedGradIndex=ec.visuals.gradient.indexOf(newStop);
+  drawGradientBar(); updateGradColorInput(); markDirty();
+});
+document.getElementById('gradDeleteStop').addEventListener('click',()=>{
+  const ec=curEmitter(); if(!ec) return;
+  if(ec.visuals.gradient.length<=2){ showToast('Minimum 2 gradient stops'); return; }
+  ec.visuals.gradient.splice(selectedGradIndex,1);
+  selectedGradIndex=0;
+  drawGradientBar(); updateGradColorInput(); markDirty();
+});
+
+/* =========================================================
+   TIMELINE WIDGET (selected emitter)
+========================================================= */
+const tlTrack=document.getElementById('timelineTrack');
+function drawTimeline(){
+  const ec=curEmitter(); if(!ec) return;
+  tlTrack.innerHTML='';
+  const dur=ec.timeline.duration>0?ec.timeline.duration:1;
+  const w=tlTrack.getBoundingClientRect().width;
+  const playhead=document.createElement('div'); playhead.className='tl-playhead';
+  const tw = ec.timeline.loop ? ((simTime%dur)+dur)%dur : clamp(simTime,0,dur);
+  playhead.style.left=(tw/dur*w)+'px';
+  tlTrack.appendChild(playhead);
+
+  ec.timeline.keyframes.forEach((kf,idx)=>{
+    const el=document.createElement('div');
+    el.className='tl-kf'+(idx===selectedKfIndex?' selected':'');
+    el.style.left=(clamp(kf.t/dur,0,1)*w)+'px';
+    el.addEventListener('pointerdown',(evt)=>{
+      evt.stopPropagation();
+      selectedKfIndex=idx; drawTimeline(); buildKfEditor();
+      const startX=evt.clientX; const startT=kf.t;
+      function move(e2){
+        const dx=e2.clientX-startX;
+        kf.t=clamp(startT+dx/w*dur,0, ec.timeline.duration);
+        drawTimeline(); markDirty();
+      }
+      function up(){ window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); }
+      window.addEventListener('pointermove',move); window.addEventListener('pointerup',up);
+    });
+    tlTrack.appendChild(el);
+  });
+}
+tlTrack.addEventListener('click',(evt)=>{
+  if(evt.target!==tlTrack) return;
+  const ec=curEmitter(); if(!ec) return;
+  const r=tlTrack.getBoundingClientRect();
+  const dur=ec.timeline.duration>0?ec.timeline.duration:1;
+  simTime = clamp((evt.clientX-r.left)/r.width,0,1)*dur;
+});
+
+function buildKfEditor(){
+  const ec=curEmitter(); if(!ec) return;
+  const host=document.getElementById('kfFieldsHost'); host.innerHTML='';
+  const kf=ec.timeline.keyframes[selectedKfIndex];
+  if(!kf){ host.innerHTML='<div class="hint">No keyframe selected.</div>'; return; }
+  host.appendChild(numField({label:'Time', value:kf.t, min:0,max:ec.timeline.duration,step:0.05,unit:'s', onChange:v=>{kf.t=v; drawTimeline(); markDirty();}}).el);
+  host.appendChild(numField({label:'Position X', value:kf.x, min:0,max:2000,step:1,unit:'px', onChange:v=>{kf.x=v; markDirty();}}).el);
+  host.appendChild(numField({label:'Position Y', value:kf.y, min:0,max:2000,step:1,unit:'px', onChange:v=>{kf.y=v; markDirty();}}).el);
+  host.appendChild(numField({label:'Emitter rotation', value:kf.rot, min:-3600,max:3600,step:1,unit:'°', onChange:v=>{kf.rot=v; markDirty();}}).el);
+  host.appendChild(numField({label:'Emission multiplier', value:kf.mult, min:0,max:5,step:0.05, onChange:v=>{kf.mult=v; markDirty();}}).el);
+}
+function syncTimelineUI(){ drawTimeline(); buildKfEditor(); }
+
+document.getElementById('tl_addKf').addEventListener('click',()=>{
+  const ec=curEmitter(); if(!ec) return;
+  const last=ec.timeline.keyframes[ec.timeline.keyframes.length-1];
+  const newT=clamp((last?last.t:0)+0.5, 0, ec.timeline.duration);
+  ec.timeline.keyframes.push({t:newT, x:last?last.x:450, y:last?last.y:300, rot:last?last.rot:0, mult:last?last.mult:1});
+  selectedKfIndex=ec.timeline.keyframes.length-1;
+  drawTimeline(); buildKfEditor(); markDirty();
+});
+document.getElementById('tl_delKf').addEventListener('click',()=>{
+  const ec=curEmitter(); if(!ec) return;
+  if(ec.timeline.keyframes.length<=1){ showToast('At least 1 keyframe must remain'); return; }
+  ec.timeline.keyframes.splice(selectedKfIndex,1);
+  selectedKfIndex=0;
+  drawTimeline(); buildKfEditor(); markDirty();
+});
+document.getElementById('tl_loop').addEventListener('change',(e)=>{ curEmitter().timeline.loop=e.target.checked; markDirty(); });
+
+const tlDurHost=document.getElementById('tl_durationHost');
+let tlDurField=numField({label:'Loop duration', value:4, min:0.2,max:60,step:0.1,unit:'s', onChange:v=>{ curEmitter().timeline.duration=v; markDirty(); drawTimeline(); }});
+tlDurHost.appendChild(tlDurField.el);
+
+/* =========================================================
+   REFRESH HELPERS
+========================================================= */
+function refreshEmitterEditingPanels(){
+  buildEmitterPanel(); buildPhysicsPanel(); buildVisualsPanel();
+  drawGradientBar(); updateGradColorInput(); drawTimeline(); buildKfEditor();
+  const ec=curEmitter();
+  tlDurField.value=ec.timeline.duration;
+  document.getElementById('tl_loop').checked=ec.timeline.loop;
+  ceSize.draw(); ceAlpha.draw(); ceSpeed.draw(); ceScaleX.draw(); ceScaleY.draw();
+  refreshBottomLabel();
+}
+function refreshAllUI(){
+  rebuildEmittersBar();
+  refreshEmitterEditingPanels();
+  rebuildForcesList();
+  buildForceFields();
+}
+
+/* =========================================================
+   HEADER ACTIONS: NEW / RESET / PLAY
+========================================================= */
+document.getElementById('btnNew').addEventListener('click',()=>{
+  showConfirm('Create a new project? Unsaved changes will be lost.', ()=>{
+    cfg=defaultConfig(); selectedEmitterIdx=0; selectedKfIndex=0; selectedGradIndex=0; selectedForceIdx=-1;
+    applyStageSize(cfg.stage.width, cfg.stage.height, true);
+    resetSim(); refreshAllUI(); showToast('New project created');
+  }, {title:'New project', okLabel:'Create new'});
+});
+document.getElementById('btnReset').addEventListener('click',()=>{ resetSim(); showToast('Simulation reset'); });
+document.getElementById('playToggle').addEventListener('click',()=>{
+  playing=!playing;
+  document.getElementById('iconPlay').style.display=playing?'none':'block';
+  document.getElementById('iconPause').style.display=playing?'block':'none';
+});
+
+/* =========================================================
+   SAVE / LOAD
+========================================================= */
+function triggerDownload(blob, filename){
+  try{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=filename; a.rel='noopener'; a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>{ try{URL.revokeObjectURL(url);}catch(e){} }, 5000);
+    return true;
+  }catch(err){
+    console.error('triggerDownload failed', err);
+    try{
+      const url=URL.createObjectURL(blob);
+      const w=window.open(url,'_blank');
+      if(w){
+        showToast('Download blocked by the browser — opened the file "'+filename+'" in a new tab. Save it manually (right-click → Save as).');
+      } else {
+        showToast('The browser blocked the download and pop-ups. Check the block icon in the address bar and allow downloads/pop-ups for this site.');
+      }
+    }catch(err2){
+      showToast('Failed to save file "'+filename+'": '+err2.message);
+    }
+    return false;
+  }
+}
+function serializeConfig(){
+  return {
+    version:4,
+    stage: {width:canvas.width, height:canvas.height},
+    emitters: cfg.emitters.map(ec=>({
+      id:ec.id, name:ec.name, enabled:ec.enabled,
+      emitter:ec.emitter, physics:ec.physics, visuals:ec.visuals, timeline:ec.timeline
+    })),
+    forces: cfg.forces.map(f=>({...f}))
+  };
+}
+document.getElementById('btnSave').addEventListener('click',()=>{
+  const data=JSON.stringify(serializeConfig(),null,2);
+  const blob=new Blob([data],{type:'application/json'});
+  if(triggerDownload(blob,'particle-project.json')){
+    showToast('Project saved as JSON — check your Downloads folder');
+  }
+});
+document.getElementById('btnLoad').addEventListener('click',()=>document.getElementById('loadInput').click());
+document.getElementById('loadInput').addEventListener('change',(evt)=>{
+  const f=evt.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const loaded=JSON.parse(reader.result);
+      applyLoadedConfig(loaded);
+      showToast('Project loaded');
+    }catch(err){ showToast('Error loading JSON file'); }
+  };
+  reader.readAsText(f);
+  evt.target.value='';
+});
+function applyLoadedConfig(loaded){
+  let emittersList;
+  if(loaded.emitters && Array.isArray(loaded.emitters) && loaded.emitters.length){
+    emittersList=loaded.emitters;
+  } else if(loaded.emitter || loaded.physics || loaded.visuals){
+    emittersList=[{name:'Emitter 1', emitter:loaded.emitter, physics:loaded.physics, visuals:loaded.visuals, timeline:loaded.timeline}];
+  } else {
+    emittersList=[{}];
+  }
+  const newEmitters=emittersList.map((p,i)=>buildEmitterFromPartial(p,i));
+  // fix up subEmitter target IDs when the original ids no longer match after rebuild (they keep id if provided, so mapping by original id -> new object usually holds)
+  cfg={ version:4, stage:Object.assign({width:900,height:540}, loaded.stage||{}), emitters:newEmitters, forces:(loaded.forces||[]).map((f,i)=>buildForceFromPartial(f,i)) };
+  applyStageSize(cfg.stage.width, cfg.stage.height, true);
+  selectedEmitterIdx=0; selectedKfIndex=0; selectedGradIndex=0; selectedForceIdx=cfg.forces.length?0:-1;
+  rebuildAllEmitterCaches();
+  resetSim();
+  refreshAllUI();
+}
+
+/* =========================================================
+   AUTOSAVE
+========================================================= */
+setInterval(()=>{
+  if(isDirty){
+    try{ localStorage.setItem('particleForgeAutosave', JSON.stringify(serializeConfig())); isDirty=false; }catch(e){}
+  }
+},4000);
+window.addEventListener('load',()=>{
+  try{
+    const saved=localStorage.getItem('particleForgeAutosave');
+    if(saved){ document.getElementById('autosaveBanner').classList.add('show'); }
+  }catch(e){}
+});
+document.getElementById('asAccept').addEventListener('click',()=>{
+  try{
+    const saved=JSON.parse(localStorage.getItem('particleForgeAutosave'));
+    applyLoadedConfig(saved);
+    showToast('Session restored');
+  }catch(e){ showToast('Failed to restore session'); }
+  document.getElementById('autosaveBanner').classList.remove('show');
+});
+document.getElementById('asDiscard').addEventListener('click',()=>{
+  localStorage.removeItem('particleForgeAutosave');
+  document.getElementById('autosaveBanner').classList.remove('show');
+});
+
+/* =========================================================
+   PRESETS (single- and multi-emitter, showcasing new features)
+========================================================= */
+const PRESETS = {
+  fire:{ emitters:[{ name:'Fire',
+    emitter:{shape:'circle', circleRadius:16, circleFill:true, mode:'continuous', rate:90,
+      angle:-90, spread:16, lifetimeMin:0.55, lifetimeMax:1.0},
+    physics:{speedMin:40, speedMax:95, accel:10, gravityY:-35, tangentialAccel:8},
+    visuals:{texture:'dot', blend:'lighter', sizeMin:14, sizeMax:28,
+      sizeCurve:[{t:0,v:0.4},{t:0.3,v:1},{t:1,v:0.05}],
+      alphaCurve:[{t:0,v:0},{t:0.1,v:1},{t:0.6,v:0.85},{t:1,v:0}],
+      gradient:[{pos:0,color:'#fff6c9'},{pos:0.3,color:'#ffcf3d'},{pos:0.6,color:'#ff7a1a'},{pos:1,color:'#3a0d00'}]},
+    timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:430,rot:0,mult:1}]}
+  }]},
+  smoke:{ emitters:[{ name:'Smoke',
+    emitter:{shape:'circle', circleRadius:14, circleFill:true, mode:'continuous', rate:18,
+      angle:-90, spread:12, lifetimeMin:2.5, lifetimeMax:4.2},
+    physics:{speedMin:12, speedMax:32, gravityY:-10, windX:8, tangentialAccel:4,
+      noiseEnabled:true, noiseStrength:25, noiseScale:0.012, noiseSpeed:0.4},
+    visuals:{texture:'smoke', blend:'source-over', sizeMin:22, sizeMax:36,
+      rotSpeedMin:-15, rotSpeedMax:15,
+      sizeCurve:[{t:0,v:0.25},{t:1,v:2.0}],
+      alphaCurve:[{t:0,v:0},{t:0.25,v:0.45},{t:1,v:0}],
+      gradient:[{pos:0,color:'#d8dce1'},{pos:1,color:'#33383f'}]},
+    timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:430,rot:0,mult:1}]}
+  }]},
+  magic:{ emitters:[{ name:'Magic',
+    emitter:{shape:'circle', circleRadius:34, circleFill:false, mode:'continuous', rate:45,
+      angle:0, spread:180, lifetimeMin:0.8, lifetimeMax:1.5},
+    physics:{speedMin:15, speedMax:55, gravityY:18, radialAccel:-25, tangentialAccel:45},
+    visuals:{texture:'star', blend:'lighter', sizeMin:4, sizeMax:11,
+      rotSpeedMin:-200, rotSpeedMax:200,
+      colorRandomize:{enabled:true, colorA:'#b47bff', colorB:'#3ddbff'},
+      sizeCurve:[{t:0,v:0},{t:0.2,v:1},{t:1,v:0}],
+      alphaCurve:[{t:0,v:0},{t:0.15,v:1},{t:0.8,v:1},{t:1,v:0}],
+      gradient:[{pos:0,color:'#ffffff'},{pos:0.5,color:'#b47bff'},{pos:1,color:'#3ddbff'}]},
+    timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:300,rot:0,mult:1},{t:4,x:450,y:300,rot:360,mult:1}]}
+  }]},
+  explosion:{ emitters:[{ name:'Explosion',
+    emitter:{shape:'point', mode:'burst', burstCount:160, burstInterval:1.6,
+      angle:0, spread:180, lifetimeMin:0.45, lifetimeMax:1.05},
+    physics:{speedMin:140, speedMax:420, accel:-90, gravityY:140},
+    visuals:{texture:'dot', blend:'lighter', sizeMin:6, sizeMax:17,
+      sizeCurve:[{t:0,v:1},{t:1,v:0.15}],
+      alphaCurve:[{t:0,v:1},{t:0.65,v:1},{t:1,v:0}],
+      gradient:[{pos:0,color:'#fff6d6'},{pos:0.3,color:'#ffb23d'},{pos:0.7,color:'#ff3d3d'},{pos:1,color:'#200606'}]},
+    timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:300,rot:0,mult:1}]}
+  }]},
+  rain:{ emitters:[{ name:'Rain',
+    emitter:{shape:'line', lineLength:900, lineAngle:0, mode:'continuous', rate:220,
+      angle:90, spread:3, lifetimeMin:1.0, lifetimeMax:1.4},
+    physics:{speedMin:520, speedMax:700, gravityY:900, windX:20, collisionEnabled:true, floorY:520, bounce:0.05},
+    visuals:{texture:'dot', blend:'source-over', sizeMin:2, sizeMax:4, alignToDirection:true,
+      scaleYCurve:[{t:0,v:2.2},{t:1,v:2.2}],
+      alphaCurve:[{t:0,v:0.8},{t:0.85,v:0.6},{t:1,v:0}],
+      gradient:[{pos:0,color:'#bfe3ff'},{pos:1,color:'#4d8fdd'}]},
+    timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:8,rot:0,mult:1}]}
+  }]},
+  snow:{ emitters:[{ name:'Snow',
+    emitter:{shape:'line', lineLength:900, lineAngle:0, mode:'continuous', rate:35,
+      angle:90, spread:18, lifetimeMin:4.0, lifetimeMax:7.0},
+    physics:{speedMin:18, speedMax:45, gravityY:14, windX:10, tangentialAccel:10,
+      noiseEnabled:true, noiseStrength:12, noiseScale:0.01, noiseSpeed:0.3},
+    visuals:{texture:'dot', blend:'source-over', sizeMin:3, sizeMax:7, rotSpeedMin:-30, rotSpeedMax:30,
+      alphaCurve:[{t:0,v:0},{t:0.1,v:1},{t:0.9,v:1},{t:1,v:0}],
+      gradient:[{pos:0,color:'#ffffff'},{pos:1,color:'#dfe8ff'}]},
+    timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:8,rot:0,mult:1}]}
+  }]},
+  confetti:{ emitters:[{ name:'Confetti',
+    emitter:{shape:'point', mode:'burst', burstCount:120, burstInterval:2.2,
+      angle:-90, spread:55, lifetimeMin:2.0, lifetimeMax:3.5},
+    physics:{speedMin:150, speedMax:320, accel:-20, gravityY:230, windX:15},
+    visuals:{texture:'square', blend:'source-over', sizeMin:6, sizeMax:10, rotSpeedMin:-360, rotSpeedMax:360,
+      alphaCurve:[{t:0,v:1},{t:0.8,v:1},{t:1,v:0}],
+      gradient:[{pos:0,color:'#ff5c3d'},{pos:0.25,color:'#ffd93d'},{pos:0.5,color:'#4ade80'},{pos:0.75,color:'#3ddbff'},{pos:1,color:'#b47bff'}]},
+    timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:380,rot:0,mult:1}]}
+  }]},
+
+  campfire:{ emitters:[
+    { name:'Flame',
+      emitter:{shape:'circle', circleRadius:13, circleFill:true, mode:'continuous', rate:75,
+        angle:-90, spread:14, lifetimeMin:0.45, lifetimeMax:0.85},
+      physics:{speedMin:35, speedMax:80, accel:8, gravityY:-40, tangentialAccel:10},
+      visuals:{texture:'dot', blend:'lighter', sizeMin:12, sizeMax:24,
+        sizeCurve:[{t:0,v:0.4},{t:0.3,v:1},{t:1,v:0.05}],
+        alphaCurve:[{t:0,v:0},{t:0.1,v:1},{t:0.55,v:0.8},{t:1,v:0}],
+        gradient:[{pos:0,color:'#fff6c9'},{pos:0.3,color:'#ffcf3d'},{pos:0.65,color:'#ff7a1a'},{pos:1,color:'#3a0d00'}]},
+      timeline:{duration:4, loop:true, keyframes:[{t:0,x:420,y:460,rot:0,mult:1}]}
+    },
+    { name:'Embers',
+      emitter:{shape:'circle', circleRadius:7, circleFill:true, mode:'continuous', rate:16,
+        angle:-90, spread:35, lifetimeMin:1.2, lifetimeMax:2.2},
+      physics:{speedMin:60, speedMax:170, gravityY:60, windX:6, tangentialAccel:14},
+      visuals:{texture:'dot', blend:'lighter', sizeMin:2, sizeMax:4,
+        alphaCurve:[{t:0,v:1},{t:0.7,v:0.8},{t:1,v:0}],
+        gradient:[{pos:0,color:'#fff2c0'},{pos:0.4,color:'#ffb23d'},{pos:1,color:'#7a1a00'}]},
+      timeline:{duration:4, loop:true, keyframes:[{t:0,x:420,y:460,rot:0,mult:1}]}
+    },
+    { name:'Smoke',
+      emitter:{shape:'circle', circleRadius:18, circleFill:true, mode:'continuous', rate:12,
+        angle:-90, spread:10, lifetimeMin:3.0, lifetimeMax:5.0},
+      physics:{speedMin:10, speedMax:28, gravityY:-8, windX:12, tangentialAccel:4,
+        noiseEnabled:true, noiseStrength:20, noiseScale:0.012, noiseSpeed:0.35},
+      visuals:{texture:'smoke', blend:'source-over', sizeMin:20, sizeMax:32, rotSpeedMin:-12, rotSpeedMax:12,
+        sizeCurve:[{t:0,v:0.3},{t:1,v:2.0}],
+        alphaCurve:[{t:0,v:0},{t:0.25,v:0.4},{t:1,v:0}],
+        gradient:[{pos:0,color:'#d8dce1'},{pos:1,color:'#2b2f35'}]},
+      timeline:{duration:4, loop:true, keyframes:[{t:0,x:420,y:425,rot:0,mult:1}]}
+    }
+  ]},
+
+  fireworks:{ emitters:[
+    { name:'Rocket',
+      emitter:{shape:'point', mode:'burst', burstCount:1, burstInterval:2.2,
+        angle:-90, spread:6, lifetimeMin:0.9, lifetimeMax:1.15,
+        subEmitter:{enabled:true, mode:'deathBurst', targetEmitterId:null, burstCount:70}},
+      physics:{speedMin:380, speedMax:430, accel:-40, gravityY:280},
+      visuals:{texture:'dot', blend:'lighter', sizeMin:2.5, sizeMax:4,
+        alphaCurve:[{t:0,v:1},{t:0.85,v:1},{t:1,v:0}],
+        gradient:[{pos:0,color:'#ffffff'},{pos:1,color:'#ffd08a'}]},
+      timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:520,rot:0,mult:1}]}
+    },
+    { name:'Blast',
+      emitter:{shape:'point', mode:'burst', burstCount:0, burstInterval:99,
+        angle:0, spread:180, lifetimeMin:0.6, lifetimeMax:1.1,
+        subEmitter:{enabled:true, mode:'trail', targetEmitterId:null, trailInterval:0.03}},
+      physics:{speedMin:120, speedMax:260, accel:-60, gravityY:150},
+      visuals:{texture:'dot', blend:'lighter', sizeMin:4, sizeMax:10,
+        colorRandomize:{enabled:true, colorA:'#ffd93d', colorB:'#ff4d6d'},
+        sizeCurve:[{t:0,v:1},{t:1,v:0.2}],
+        alphaCurve:[{t:0,v:1},{t:0.6,v:1},{t:1,v:0}],
+        gradient:[{pos:0,color:'#ffffff'},{pos:0.5,color:'#ffb23d'},{pos:1,color:'#3d1a5c'}]},
+      timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:150,rot:0,mult:1}]}
+    },
+    { name:'Trail Sparks',
+      emitter:{shape:'point', mode:'continuous', rate:0,
+        angle:0, spread:180, lifetimeMin:0.2, lifetimeMax:0.4},
+      physics:{speedMin:5, speedMax:20, gravityY:60},
+      visuals:{texture:'dot', blend:'lighter', sizeMin:1.5, sizeMax:3,
+        alphaCurve:[{t:0,v:1},{t:1,v:0}],
+        gradient:[{pos:0,color:'#ffffff'},{pos:1,color:'#ff8a1a'}]},
+      timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:150,rot:0,mult:1}]}
+    }
+  ]},
+
+  portal:{ emitters:[
+    { name:'Ring (vortex)',
+      emitter:{shape:'circle', circleRadius:70, circleFill:false, mode:'continuous', rate:60,
+        angle:0, spread:180, lifetimeMin:1.0, lifetimeMax:1.8},
+      physics:{speedMin:10, speedMax:40, tangentialAccel:70},
+      visuals:{texture:'star', blend:'lighter', sizeMin:3, sizeMax:8, rotSpeedMin:-150, rotSpeedMax:150,
+        colorRandomize:{enabled:true, colorA:'#3ddbff', colorB:'#b47bff'},
+        sizeCurve:[{t:0,v:0.4},{t:0.3,v:1},{t:1,v:0}],
+        alphaCurve:[{t:0,v:0},{t:0.15,v:1},{t:0.8,v:1},{t:1,v:0}],
+        gradient:[{pos:0,color:'#3ddbff'},{pos:0.5,color:'#b47bff'},{pos:1,color:'#1a0d3a'}]},
+      timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:300,rot:0,mult:1},{t:4,x:450,y:300,rot:360,mult:1}]}
+    },
+    { name:'Core',
+      emitter:{shape:'circle', circleRadius:10, circleFill:true, mode:'continuous', rate:25,
+        angle:0, spread:180, lifetimeMin:0.6, lifetimeMax:1.0},
+      physics:{speedMin:5, speedMax:20, tangentialAccel:30},
+      visuals:{texture:'dot', blend:'lighter', sizeMin:14, sizeMax:26,
+        sizeCurve:[{t:0,v:0.5},{t:0.2,v:1},{t:1,v:0}],
+        alphaCurve:[{t:0,v:0},{t:0.1,v:1},{t:0.6,v:0.7},{t:1,v:0}],
+        gradient:[{pos:0,color:'#ffffff'},{pos:0.5,color:'#d8b6ff'},{pos:1,color:'#6a3dbf'}]},
+      timeline:{duration:4, loop:true, keyframes:[{t:0,x:450,y:300,rot:0,mult:1}]}
+    }
+  ],
+  forces:[ {name:'Portal Swirl', x:450, y:300, strength:90, radius:220, mode:'attract', enabled:true} ]
+  }
+};
+const PRESET_LABELS={fire:'Fire',smoke:'Smoke',magic:'Magic',explosion:'Explosion',rain:'Rain',snow:'Snow',
+  confetti:'Confetti',campfire:'Ognisko',fireworks:'Fajerwerki',portal:'Portal magiczny'};
+
+function applyPreset(name){
+  const preset=PRESETS[name];
+  if(!preset) return;
+  const list=preset.emitters;
+  const newEmitters=list.map((p,i)=>buildEmitterFromPartial(p,i));
+  // wire up sub-emitter targets by relative index where preset used null placeholder (targets the next emitter in the list)
+  list.forEach((p,i)=>{
+    if(p.emitter && p.emitter.subEmitter && p.emitter.subEmitter.enabled && !p.emitter.subEmitter.targetEmitterId){
+      const targetIdx=(i+1)%newEmitters.length;
+      newEmitters[i].emitter.subEmitter.targetEmitterId=newEmitters[targetIdx].id;
+    }
+  });
+  cfg={ version:4, stage:{width:900,height:540}, emitters:newEmitters, forces:(preset.forces||[]).map((f,i)=>buildForceFromPartial(f,i)) };
+  applyStageSize(900,540,true);
+  selectedEmitterIdx=0; selectedKfIndex=0; selectedGradIndex=0; selectedForceIdx=cfg.forces.length?0:-1;
+  rebuildAllEmitterCaches();
+  resetSim();
+  refreshAllUI();
+  showToast('Applied preset: '+(PRESET_LABELS[name]||name));
+}
+document.getElementById('presetSelect').addEventListener('change',(e)=>{
+  const val=e.target.value;
+  if(val){ applyPreset(val); }
+  e.target.value='';
+});
+
+/* =========================================================
+   EXPORT — renders the whole scene, all emitters and forces,
+   with their real positions preserved.
+========================================================= */
+const exportModal=document.getElementById('exportModal');
+let expCfg={ format:'sheet', cols:4, rows:4, frameW:96, frameH:58, duration:2.0, frameStep:1/20, alphaMode:'8bit', threshold:128, meta:true, autoGrid:true, lockAspect:true, _userSetRes:false };
+
+function computeDefaultFrameSize(){
+  const stageW=canvas.width, stageH=canvas.height;
+  const longEdge=128;
+  let w,h;
+  if(stageW>=stageH){ w=longEdge; h=Math.round(longEdge*stageH/stageW); }
+  else { h=longEdge; w=Math.round(longEdge*stageW/stageH); }
+  return {w:Math.max(8,w), h:Math.max(8,h)};
+}
+
+function updateExportFormatUI(){
+  const isFrames = expCfg.format==='frames';
+  document.getElementById('exp_gridSection').style.display = isFrames ? 'none' : 'block';
+  const stageLabel=canvas.width+'×'+canvas.height;
+  document.getElementById('exp_resHint').textContent = isFrames
+    ? 'Each frame will be saved as a separate PNG file and packed into a single ZIP archive.'
+    : 'The whole scene ('+stageLabel+') is scaled to the chosen frame resolution — the layout and relative positions of all emitters are preserved.';
+  document.getElementById('exp_metaRow').lastChild.textContent = isFrames
+    ? ' Include a .json metadata file (frame order and timing)'
+    : ' Include a .json metadata file (frame coordinates, Phaser/PixiJS-compatible format)';
+}
+
+function buildExportModalFields(){
+  if(!expCfg._userSetRes){
+    const def=computeDefaultFrameSize();
+    expCfg.frameW=def.w; expCfg.frameH=def.h;
+  }
+
+  const gridHost=document.getElementById('exp_gridHost'); gridHost.innerHTML='';
+  gridHost.appendChild(numField({label:'Columns', value:expCfg.cols, min:1,max:32,step:1, onChange:v=>{expCfg.cols=v;}}).el);
+  gridHost.appendChild(numField({label:'Rows', value:expCfg.rows, min:1,max:32,step:1, onChange:v=>{expCfg.rows=v;}}).el);
+
+  const stageAspect=canvas.width/canvas.height;
+  const resHost=document.getElementById('exp_resHost'); resHost.innerHTML='';
+  let wField, hField;
+  wField=numField({label:'Frame width', value:expCfg.frameW, min:8,max:512,step:8,unit:'px', onChange:v=>{
+    expCfg.frameW=v; expCfg._userSetRes=true;
+    if(expCfg.lockAspect){ expCfg.frameH=Math.max(8,Math.round(v/stageAspect)); hField.value=expCfg.frameH; }
+  }});
+  hField=numField({label:'Frame height', value:expCfg.frameH, min:8,max:512,step:8,unit:'px', onChange:v=>{
+    expCfg.frameH=v; expCfg._userSetRes=true;
+    if(expCfg.lockAspect){ expCfg.frameW=Math.max(8,Math.round(v*stageAspect)); wField.value=expCfg.frameW; }
+  }});
+  resHost.appendChild(wField.el); resHost.appendChild(hField.el);
+  document.getElementById('exp_lockAspect').checked=expCfg.lockAspect;
+  document.getElementById('exp_lockAspect').onchange=(e)=>{ expCfg.lockAspect=e.target.checked; };
+
+  const timeHost=document.getElementById('exp_timeHost'); timeHost.innerHTML='';
+  timeHost.appendChild(numField({label:'Duration', value:expCfg.duration, min:0.1,max:30,step:0.1,unit:'s', onChange:v=>{expCfg.duration=v;}}).el);
+  timeHost.appendChild(numField({label:'Time step', value:expCfg.frameStep, min:1/60,max:2,step:1/60,decimals:4,unit:'s', onChange:v=>{expCfg.frameStep=v;}}).el);
+
+  const threshHost=document.getElementById('exp_thresholdHost'); threshHost.innerHTML='';
+  threshHost.appendChild(numField({label:'Alpha threshold (0-255)', value:expCfg.threshold, min:1,max:254,step:1, onChange:v=>{expCfg.threshold=v;}}).el);
+
+  updateExportFormatUI();
+}
+document.getElementById('btnExport').addEventListener('click',()=>{
+  buildExportModalFields();
+  exportModal.classList.add('show');
+});
+document.getElementById('exp_cancel').addEventListener('click',()=>exportModal.classList.remove('show'));
+document.getElementById('exp_autoGrid').addEventListener('change',(e)=>{ expCfg.autoGrid=e.target.checked; });
+document.querySelectorAll('#exp_format .toggle-opt').forEach(opt=>{
+  opt.addEventListener('click',()=>{
+    document.querySelectorAll('#exp_format .toggle-opt').forEach(o=>o.classList.remove('active'));
+    opt.classList.add('active');
+    expCfg.format=opt.dataset.val;
+    updateExportFormatUI();
+  });
+});
+document.querySelectorAll('#exp_alphaMode .toggle-opt').forEach(opt=>{
+  opt.addEventListener('click',()=>{
+    document.querySelectorAll('#exp_alphaMode .toggle-opt').forEach(o=>o.classList.remove('active'));
+    opt.classList.add('active');
+    expCfg.alphaMode=opt.dataset.val;
+    document.getElementById('exp_thresholdHost').style.display = expCfg.alphaMode==='1bit' ? 'flex':'none';
+  });
+});
+document.getElementById('exp_meta').addEventListener('change',(e)=>{ expCfg.meta=e.target.checked; });
+
+/* ---------- shared deterministic bake simulator ---------- */
+function createBaker(){
+  const bakeRng=mulberry32(777);
+  const state={ t:0, particles:[] };
+  const accStore=new Map();
+  function stepBake(dt){
+    advanceEmitters(state.particles, bakeRng, state.t, dt, accStore);
+    advanceParticles(state.particles, bakeRng, state.t, dt, cfg.forces);
+    state.t+=dt;
+  }
+  return { state, stepBake };
+}
+
+/* ---------- minimal built-in ZIP writer (stored, no compression) ---------- */
+let _crc32Table=null;
+function crc32(buf){
+  if(!_crc32Table){
+    _crc32Table=new Uint32Array(256);
+    for(let n=0;n<256;n++){
+      let c=n;
+      for(let k=0;k<8;k++){ c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1); }
+      _crc32Table[n]=c>>>0;
+    }
+  }
+  let crc=0^(-1);
+  for(let i=0;i<buf.length;i++){ crc=(crc>>>8) ^ _crc32Table[(crc^buf[i])&0xFF]; }
+  return (crc^(-1))>>>0;
+}
+function makeZip(files){
+  const encoder=new TextEncoder();
+  const localParts=[]; const centralParts=[];
+  let offset=0;
+  const DOS_TIME=0, DOS_DATE=0x21;
+  for(const f of files){
+    const nameBytes=encoder.encode(f.name);
+    const data=f.data;
+    const crc=crc32(data);
+    const size=data.length;
+
+    const local=new Uint8Array(30+nameBytes.length);
+    const dv=new DataView(local.buffer);
+    dv.setUint32(0,0x04034b50,true);
+    dv.setUint16(4,20,true);
+    dv.setUint16(6,0,true);
+    dv.setUint16(8,0,true);
+    dv.setUint16(10,DOS_TIME,true);
+    dv.setUint16(12,DOS_DATE,true);
+    dv.setUint32(14,crc,true);
+    dv.setUint32(18,size,true);
+    dv.setUint32(22,size,true);
+    dv.setUint16(26,nameBytes.length,true);
+    dv.setUint16(28,0,true);
+    local.set(nameBytes,30);
+    localParts.push(local,data);
+
+    const central=new Uint8Array(46+nameBytes.length);
+    const cdv=new DataView(central.buffer);
+    cdv.setUint32(0,0x02014b50,true);
+    cdv.setUint16(4,20,true);
+    cdv.setUint16(6,20,true);
+    cdv.setUint16(8,0,true);
+    cdv.setUint16(10,0,true);
+    cdv.setUint16(12,DOS_TIME,true);
+    cdv.setUint16(14,DOS_DATE,true);
+    cdv.setUint32(16,crc,true);
+    cdv.setUint32(20,size,true);
+    cdv.setUint32(24,size,true);
+    cdv.setUint16(28,nameBytes.length,true);
+    cdv.setUint16(30,0,true);
+    cdv.setUint16(32,0,true);
+    cdv.setUint16(34,0,true);
+    cdv.setUint16(36,0,true);
+    cdv.setUint32(38,0,true);
+    cdv.setUint32(42,offset,true);
+    central.set(nameBytes,46);
+    centralParts.push(central);
+
+    offset += local.length + data.length;
+  }
+  const centralSize=centralParts.reduce((a,p)=>a+p.length,0);
+  const centralOffset=offset;
+  const end=new Uint8Array(22);
+  const edv=new DataView(end.buffer);
+  edv.setUint32(0,0x06054b50,true);
+  edv.setUint16(4,0,true);
+  edv.setUint16(6,0,true);
+  edv.setUint16(8,files.length,true);
+  edv.setUint16(10,files.length,true);
+  edv.setUint32(12,centralSize,true);
+  edv.setUint32(16,centralOffset,true);
+  edv.setUint16(20,0,true);
+  return new Blob([...localParts, ...centralParts, end], {type:'application/zip'});
+}
+function canvasToBlobAsync(cnv){
+  return new Promise(resolve=>cnv.toBlob(resolve,'image/png'));
+}
+
+function bakeSpritesheet(){
+  const STAGE_W=canvas.width, STAGE_H=canvas.height;
+  const frameCount=Math.max(1, Math.round(expCfg.duration/expCfg.frameStep)+1);
+  let cols=expCfg.cols, rows=expCfg.rows;
+  if(expCfg.autoGrid){
+    cols=Math.ceil(Math.sqrt(frameCount));
+    rows=Math.ceil(frameCount/cols);
+  } else if(cols*rows<frameCount){
+    rows=Math.ceil(frameCount/cols);
+  }
+  const fw=expCfg.frameW, fh=expCfg.frameH;
+  const sheetW=cols*fw, sheetH=rows*fh;
+  const MAX_SHEET_PIXELS = 30000000;
+  const MAX_FRAME_COUNT = 600;
+  if(frameCount>MAX_FRAME_COUNT){
+    showToast('Too many frames ('+frameCount+'). Reduce the duration or increase the time step (limit: '+MAX_FRAME_COUNT+').');
+    return;
+  }
+  if(sheetW*sheetH>MAX_SHEET_PIXELS || sheetW>16384 || sheetH>16384){
+    showToast('The output sheet is too large ('+sheetW+'×'+sheetH+' px). Reduce the frame resolution or frame count.');
+    return;
+  }
+  const sheet=document.createElement('canvas');
+  sheet.width=sheetW; sheet.height=sheetH;
+  const sctx=sheet.getContext('2d');
+  if(!sctx){
+    showToast('Failed to create the export canvas — reduce the resolution and try again.');
+    return;
+  }
+
+  const baker=createBaker();
+  const fixedDt=1/120;
+  let frameIdx=0, nextCapture=0;
+  const frameRects=[];
+  const stageCanvas=document.createElement('canvas'); stageCanvas.width=STAGE_W; stageCanvas.height=STAGE_H;
+  const stageCtx=stageCanvas.getContext('2d');
+  while(frameIdx<frameCount){
+    while(baker.state.t < nextCapture - 1e-9){ baker.stepBake(fixedDt); }
+    stageCtx.clearRect(0,0,STAGE_W,STAGE_H);
+    for(const pt of baker.state.particles) drawParticle(stageCtx, pt, pt.src.visuals);
+
+    const cellCanvas=document.createElement('canvas'); cellCanvas.width=fw; cellCanvas.height=fh;
+    const cellCtx=cellCanvas.getContext('2d');
+    cellCtx.drawImage(stageCanvas,0,0,STAGE_W,STAGE_H,0,0,fw,fh);
+    if(expCfg.alphaMode==='1bit'){
+      const imgData=cellCtx.getImageData(0,0,fw,fh);
+      const d=imgData.data;
+      for(let k=3;k<d.length;k+=4){ d[k]=d[k]>=expCfg.threshold?255:0; }
+      cellCtx.putImageData(imgData,0,0);
+    }
+    const col=frameIdx%cols, row=Math.floor(frameIdx/cols);
+    sctx.drawImage(cellCanvas,0,0,fw,fh, col*fw,row*fh,fw,fh);
+    frameRects.push({x:col*fw,y:row*fh,w:fw,h:fh});
+    frameIdx++;
+    nextCapture+=expCfg.frameStep;
+  }
+
+  sheet.toBlob((blob)=>{
+    if(!blob){
+      showToast('Export failed (sheet too large for browser memory). Reduce the frame resolution or frame count and try again.');
+      return;
+    }
+    triggerDownload(blob, 'particle-spritesheet.png');
+
+    if(expCfg.meta){
+      setTimeout(()=>{
+        const frames={};
+        frameRects.forEach((r,i)=>{
+          frames['particle_'+String(i).padStart(3,'0')]={
+            frame:{x:r.x,y:r.y,w:r.w,h:r.h},
+            sourceSize:{w:r.w,h:r.h},
+            spriteSourceSize:{x:0,y:0,w:r.w,h:r.h}
+          };
+        });
+        const meta={
+          frames,
+          meta:{
+            image:'particle-spritesheet.png',
+            size:{w:sheet.width,h:sheet.height},
+            scale:'1',
+            frameStep:expCfg.frameStep,
+            frameCount:frameRects.length,
+            alphaMode:expCfg.alphaMode,
+            stageSize:{w:STAGE_W,h:STAGE_H}
+          }
+        };
+        const metaBlob=new Blob([JSON.stringify(meta,null,2)],{type:'application/json'});
+        triggerDownload(metaBlob, 'particle-spritesheet.json');
+      }, 400);
+    }
+    showToast('Spritesheet exported ('+frameRects.length+' frames, '+cols+'x'+rows+') — check your Downloads folder');
+  },'image/png');
+}
+
+async function bakeFramesZip(){
+  const STAGE_W=canvas.width, STAGE_H=canvas.height;
+  const frameCount=Math.max(1, Math.round(expCfg.duration/expCfg.frameStep)+1);
+  const fw=expCfg.frameW, fh=expCfg.frameH;
+  const MAX_FRAME_COUNT=600;
+  if(frameCount>MAX_FRAME_COUNT){
+    showToast('Too many frames ('+frameCount+'). Reduce the duration or increase the time step (limit: '+MAX_FRAME_COUNT+').');
+    return;
+  }
+  if(fw*fh>4000000 || fw>2048 || fh>2048){
+    showToast('Frame resolution is too large. Reduce the frame width/height and try again.');
+    return;
+  }
+
+  const baker=createBaker();
+  const fixedDt=1/120;
+  const stageCanvas=document.createElement('canvas'); stageCanvas.width=STAGE_W; stageCanvas.height=STAGE_H;
+  const stageCtx=stageCanvas.getContext('2d');
+  const files=[];
+  let frameIdx=0, nextCapture=0;
+
+  while(frameIdx<frameCount){
+    while(baker.state.t < nextCapture - 1e-9){ baker.stepBake(fixedDt); }
+    stageCtx.clearRect(0,0,STAGE_W,STAGE_H);
+    for(const pt of baker.state.particles) drawParticle(stageCtx, pt, pt.src.visuals);
+
+    const cellCanvas=document.createElement('canvas'); cellCanvas.width=fw; cellCanvas.height=fh;
+    const cellCtx=cellCanvas.getContext('2d');
+    cellCtx.drawImage(stageCanvas,0,0,STAGE_W,STAGE_H,0,0,fw,fh);
+    if(expCfg.alphaMode==='1bit'){
+      const imgData=cellCtx.getImageData(0,0,fw,fh);
+      const d=imgData.data;
+      for(let k=3;k<d.length;k+=4){ d[k]=d[k]>=expCfg.threshold?255:0; }
+      cellCtx.putImageData(imgData,0,0);
+    }
+    const blob=await canvasToBlobAsync(cellCanvas);
+    if(!blob){
+      showToast('Rendering frame '+frameIdx+' failed. Reduce the resolution and try again.');
+      return;
+    }
+    const buf=new Uint8Array(await blob.arrayBuffer());
+    files.push({ name:'frame_'+String(frameIdx).padStart(4,'0')+'.png', data:buf });
+    frameIdx++;
+    nextCapture+=expCfg.frameStep;
+  }
+
+  if(expCfg.meta){
+    const meta={
+      frameCount:files.length,
+      frameStep:expCfg.frameStep,
+      frameSize:{w:fw,h:fh},
+      alphaMode:expCfg.alphaMode,
+      stageSize:{w:STAGE_W,h:STAGE_H},
+      files: files.map(f=>f.name)
+    };
+    files.push({ name:'metadata.json', data:new TextEncoder().encode(JSON.stringify(meta,null,2)) });
+  }
+
+  const zipBlob=makeZip(files);
+  triggerDownload(zipBlob, 'particle-frames.zip');
+  showToast('Exported '+frameCount+' separate frames as ZIP — check your Downloads folder');
+}
+
+document.getElementById('exp_go').addEventListener('click',()=>{
+  exportModal.classList.remove('show');
+  showToast(expCfg.format==='frames' ? 'Rendering separate frames…' : 'Rendering spritesheet…');
+  setTimeout(async ()=>{
+    try{
+      if(expCfg.format==='frames'){
+        await bakeFramesZip();
+      } else {
+        bakeSpritesheet();
+      }
+    }catch(err){
+      console.error(err);
+      showToast('Export error: '+err.message);
+    }
+  }, 30);
+});
+
+/* =========================================================
+   INIT
+========================================================= */
+applyStageSize(cfg.stage.width, cfg.stage.height, true);
+refreshAllUI();
+resetSim();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

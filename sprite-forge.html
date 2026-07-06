@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprite Forge — pixel art palette converter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --bg: #0e1210;
+    --panel: #161c19;
+    --panel-2: #1d2521;
+    --line: #2a332e;
+    --ink: #d9e6de;
+    --ink-dim: #8aa196;
+    --accent: #6abe30;
+    --accent-2: #37946e;
+    --warn: #d95763;
+    --mono: "JetBrains Mono","Consolas",monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);
+    font-family: var(--mono); font-size:13px; line-height:1.5;
+  }
+  .wrap{display:grid; grid-template-columns: 340px 1fr; min-height:100vh;}
+  @media (max-width:900px){ .wrap{grid-template-columns:1fr;} }
+
+  .side{background:var(--panel); border-right:1px solid var(--line); padding:20px; display:flex; flex-direction:column; gap:18px;}
+  .main{padding:20px; display:flex; flex-direction:column; gap:16px;}
+
+  h1{font-size:15px; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin:0 0 2px;}
+  .sub{color:var(--ink-dim); font-size:11px; margin-bottom:6px;}
+
+  fieldset{border:1px solid var(--line); border-radius:4px; padding:12px; margin:0;}
+  legend{padding:0 6px; color:var(--ink-dim); font-size:10px; text-transform:uppercase; letter-spacing:.08em;}
+
+  label.row{display:flex; align-items:center; justify-content:space-between; gap:8px; margin:6px 0; cursor:pointer;}
+  label.row span{color:var(--ink);}
+  select, input[type=color], input[type=range], input[type=number]{
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line); border-radius:3px; padding:4px 6px; font-family:var(--mono); font-size:12px;
+  }
+  select{width:100%;}
+  input[type=range]{width:110px; accent-color:var(--accent);}
+  input[type=checkbox]{accent-color:var(--accent); width:14px; height:14px;}
+
+  .dropzone{
+    border:1px dashed var(--line); border-radius:6px; padding:22px 12px; text-align:center; color:var(--ink-dim);
+    cursor:pointer; transition:.15s; font-size:12px;
+  }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--accent); color:var(--ink); background:rgba(106,190,48,.06); }
+  .dropzone b{color:var(--accent);}
+  input[type=file]{display:none;}
+
+  button{
+    background:var(--accent-2); color:#eafff2; border:none; border-radius:3px; padding:10px 14px;
+    font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:.05em; cursor:pointer;
+  }
+  button.primary{background:var(--accent); color:#0c1a0d; font-weight:700;}
+  button:disabled{opacity:.35; cursor:not-allowed;}
+  button.ghost{background:transparent; border:1px solid var(--line); color:var(--ink-dim);}
+
+  .swatches{display:flex; flex-wrap:wrap; gap:3px; margin-top:6px;}
+  .swatch{width:16px; height:16px; border-radius:2px; border:1px solid rgba(255,255,255,.15); cursor:pointer; transition:.1s; position:relative;}
+  .swatch:hover{ transform: scale(1.15); }
+  .swatch.swatch-off{ opacity:.18; outline:1px dashed var(--warn); }
+
+  .status{color:var(--ink-dim); font-size:11px; white-space:pre-line;}
+  .status.err{color:var(--warn);}
+
+  .topbar{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;}
+  .count{color:var(--ink-dim); font-size:12px;}
+
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:10px;
+    background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px; min-height:120px;
+  }
+  .cell{background: repeating-conic-gradient(#20261f 0% 25%, #1a1f1c 0% 50%) 50%/12px 12px; border:1px solid var(--line); border-radius:4px; overflow:hidden; position:relative;}
+  .cell canvas{width:100%; display:block; image-rendering: pixelated;}
+  .cell .name{position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,.55); color:#cfe; font-size:9px; padding:2px 4px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;}
+
+  .preview{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;}
+  .preview canvas{image-rendering:pixelated; background: repeating-conic-gradient(#20261f 0% 25%, #1a1f1c 0% 50%) 50%/12px 12px; border:1px solid var(--line); border-radius:4px;}
+  .previewCtrls{display:flex; flex-direction:column; gap:8px; font-size:11px; color:var(--ink-dim);}
+
+  a.dl{color:#0c1a0d; background:var(--accent); text-decoration:none; padding:10px 14px; border-radius:3px; font-weight:700; text-transform:uppercase; font-size:12px; letter-spacing:.05em;}
+  .hint{color:var(--ink-dim); font-size:11px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="side">
+    <div>
+      <h1>Sprite Forge</h1>
+      <div class="sub">PNG frames → palette, outline, transition dithering → ZIP</div>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+      Drag <b>PNG files</b> or a <b>ZIP file</b> here<br>or click to choose
+      <input type="file" id="fileInput" multiple accept=".png,image/png,.zip,application/zip">
+    </div>
+    <div class="status" id="loadStatus"></div>
+
+    <fieldset>
+      <legend>Palette</legend>
+      <select id="paletteSelect">
+        <option value="db32">DawnBringer 32</option>
+        <option value="db16">DawnBringer 16</option>
+        <option value="pico8">PICO-8 (16)</option>
+        <option value="sweetie16">Sweetie 16</option>
+        <option value="endesga32">Endesga 32</option>
+        <option value="commodore64">Commodore 64 (16)</option>
+        <option value="gameboy">Game Boy (4 greens)</option>
+        <option value="icecreamgb">Ice Cream GB (4)</option>
+        <option value="cga">CGA (4)</option>
+        <option value="bw">1-bit black & white</option>
+        <option value="custom">Custom palette…</option>
+      </select>
+      <div class="swatches" id="paletteSwatches"></div>
+      <label class="row" style="margin-top:8px;"><span>Color matching</span>
+        <select id="colorSpace" style="width:120px;">
+          <option value="oklab" selected>OKLab (perceptual)</option>
+          <option value="rgb">RGB (classic)</option>
+        </select>
+      </label>
+      <div class="hint">OKLab picks colors the way the human eye actually sees them — usually more accurate than comparing raw RGB values, especially for subtle green/blue nuances.</div>
+      <label class="row" style="margin-top:8px;"><span>Lightness weight (OKLab)</span>
+        <input type="range" id="lightnessWeight" min="10" max="25" value="15">
+      </label>
+      <div class="hint" id="lightnessWeightHint">x1.5 — a higher value prioritizes preserving correct shading/form over exact hue accuracy. Only active in OKLab mode.</div>
+      <div id="customPaletteBox" style="display:none; margin-top:8px;">
+        <textarea id="customPaletteInput" rows="3" placeholder="#112233, #aabbcc, ff0000 …" style="width:100%; background:var(--panel-2); color:var(--ink); border:1px solid var(--line); border-radius:3px; padding:6px; font-family:var(--mono); font-size:11px; resize:vertical;"></textarea>
+        <div class="hint">Paste any number of HEX colors (with or without #, separated by anything). Useful when you need 100% certainty about the exact palette colors.</div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Dithering on transitions</legend>
+      <label class="row"><span>Enable dithering</span><input type="checkbox" id="ditherOn" checked></label>
+      <label class="row"><span>Pattern</span>
+        <select id="ditherPattern" style="width:130px;">
+          <option value="bayer2">Bayer 2x2</option>
+          <option value="bayer4" selected>Bayer 4x4</option>
+          <option value="bayer8">Bayer 8x8</option>
+          <option value="checker">Checkerboard</option>
+          <option value="bluenoise">Blue Noise</option>
+        </select>
+      </label>
+      <div class="hint">Bayer = classic, regular grid pattern (2x2 coarser grain, 8x8 finer). Checkerboard = hard checker pattern. Blue Noise = organic, irregular distribution with no visible pattern — often looks best.</div>
+      <label class="row" style="margin-top:8px;"><span>Threshold sensitivity</span>
+        <input type="range" id="ditherRange" min="0" max="45" value="22">
+      </label>
+      <div class="hint">Higher value = dithering covers a wider range of in-between shades. Flat, uniform areas always get the nearest color with no dithering.</div>
+
+      <label class="row" style="margin-top:8px;"><span>Midtones only</span><input type="checkbox" id="shadowHighlightProtect" checked></label>
+      <label class="row"><span>Shadow / highlight threshold</span>
+        <input type="range" id="shadowThresh" min="0" max="40" value="20" style="width:60px;">
+        <input type="range" id="highlightThresh" min="60" max="100" value="85" style="width:60px;">
+      </label>
+      <div class="hint">Disables dithering in very dark and very bright areas — pixel art usually wants a single clean color there, not "grain".</div>
+
+      <label class="row" style="margin-top:8px;"><span>Protect edges/details</span><input type="checkbox" id="edgeProtect" checked></label>
+      <label class="row"><span>Detection threshold</span>
+        <input type="range" id="edgeSensitivity" min="20" max="200" value="80">
+      </label>
+      <div class="hint">Detects sharp edges (outlines, small details) and blocks dithering on them, so thin lines and details don't blur into "noise". Lower value = detects more edges.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Outline</legend>
+      <label class="row"><span>Enable outline</span><input type="checkbox" id="outlineOn"></label>
+      <label class="row"><span>Outline color</span><input type="color" id="outlineColor" value="#000000"></label>
+      <label class="row"><span>Thickness (px)</span>
+        <input type="range" id="outlineWidth" min="1" max="4" value="1">
+      </label>
+      <label class="row"><span>Diagonal</span><input type="checkbox" id="outlineDiag"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Alpha</legend>
+      <label class="row"><span>Transparency threshold</span>
+        <input type="range" id="alphaThresh" min="0" max="255" value="20">
+      </label>
+      <div class="hint">Pixels with alpha below the threshold become fully transparent (prevents edge "mushiness" after scaling).</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Relaxation matching (experimental)</legend>
+      <label class="row"><span>Enable</span><input type="checkbox" id="relaxationOn"></label>
+      <label class="row"><span>Iterations</span>
+        <input type="range" id="relaxationIterations" min="1" max="5" value="3">
+      </label>
+      <div class="hint">Instead of matching each pixel independently, scores it against 4 criteria at once: color (40%), lightness (30%), agreement with neighbors (20%), shading gradient direction (10%) — over several rounds. Produces more coherent blobs and less random color "flickering", at the cost of processing time. Dithering still runs on top of this result.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Noise / speckle reduction</legend>
+      <label class="row"><span>Clean up discolored edges</span><input type="checkbox" id="edgeCleanup" checked></label>
+      <div class="hint">Fixes semi-transparent edge pixels (a blend of the foreground color and the background from the original PNG) that pick up a stray, "dirty" color from the palette after conversion — a common cause of dark speckles/halos along edges.</div>
+
+      <label class="row" style="margin-top:8px;"><span>Remove single pixels</span><input type="checkbox" id="despeckle" checked></label>
+      <div class="hint">A stricter version of the above — only cleans up single pixels that differ from all 8 neighbors. Works independently of "islands" below, you can enable both at once.</div>
+
+      <label class="row" style="margin-top:8px;"><span>Remove small islands</span><input type="checkbox" id="removeIslands" checked></label>
+      <label class="row"><span>Max island size (px)</span><input type="range" id="islandSize" min="1" max="8" value="2"></label>
+      <div class="hint">Removes small clusters of the same color detached from the rest of the shape (not just single pixels) — if they border a different color, repaints them to match it; if they're "floating" in transparency, simply erases them.</div>
+
+      <label class="row" style="margin-top:8px;"><span>Fill small holes</span><input type="checkbox" id="fillHoles" checked></label>
+      <label class="row"><span>Max hole size (px)</span><input type="range" id="holeSize" min="1" max="8" value="2"></label>
+      <div class="hint">Fills small transparent "holes" inside the silhouette (not touching the image border) with the surrounding color — a common artifact after conversion, e.g. stray see-through spots in shading.</div>
+    </fieldset>
+
+    <label class="row"><span>Skip preview (faster for many frames), save ZIP immediately</span><input type="checkbox" id="skipPreview"></label>
+    <button class="primary" id="processBtn" disabled>Process frames</button>
+    <button class="ghost" id="clearBtn" disabled>Clear</button>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="count" id="frameCount">No frames loaded</div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button class="primary" id="saveZipBtn" disabled>Save ZIP</button>
+        <div id="downloadArea"></div>
+      </div>
+    </div>
+
+    <div class="preview" id="previewBox" style="display:none;">
+      <canvas id="animCanvas" width="128" height="128"></canvas>
+      <div class="previewCtrls">
+        <label class="row"><span>Animation</span><input type="checkbox" id="animOn" checked></label>
+        <label class="row"><span>FPS</span><input type="range" id="fpsRange" min="1" max="30" value="8"></label>
+        <label class="row"><span>Show</span>
+          <select id="previewMode" style="width:130px;">
+            <option value="after">After conversion</option>
+            <option value="before">Before</option>
+          </select>
+        </label>
+        <span id="fpsLabel" class="hint"></span>
+      </div>
+    </div>
+
+    <div class="gridHeader" id="gridHeader" style="display:none; align-items:center; gap:8px;">
+      <span id="gridModeLabel" class="hint" style="font-weight:bold;"></span>
+      <select id="zoomLevel" style="width:80px; display:none;">
+        <option value="2">x2</option>
+        <option value="4" selected>x4</option>
+        <option value="8">x8</option>
+        <option value="16">x16</option>
+      </select>
+    </div>
+    <div class="grid" id="grid"><div class="hint" style="padding:8px;">Load frames to see a preview here.</div></div>
+  </div>
+
+</div>
+
+<div id="magnifier" style="position:fixed; display:none; z-index:999; pointer-events:none; border:2px solid var(--accent); border-radius:6px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,.5); background: repeating-conic-gradient(#20261f 0% 25%, #1a1f1c 0% 50%) 50%/16px 16px;">
+  <canvas id="magnifierCanvas" style="display:block; image-rendering:pixelated;"></canvas>
+  <div id="magnifierLabel" style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,.6); color:#cfe; font-size:10px; padding:2px 6px; text-align:center;"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Palettes ----------
+  const PALETTES = {
+    db32: ["000000","222034","45283c","663931","8f563b","df7126","d9a066","eec39a",
+           "fbf236","99e550","6abe30","37946e","4b692f","524b24","323c39","3f3f74",
+           "306082","5b6ee1","639bff","5fcde4","cbdbfc","ffffff","9badb7","847e87",
+           "696a6a","595652","76428a","ac3232","d95763","d77bba","8f974a","8a6f30"],
+    db16: ["140c1c","442434","30346d","4e4a4e","854c30","346524","d04648","757161",
+           "597dce","d27d2c","8595a1","6daa2c","d2aa99","6dc2ca","dad45e","deeed6"],
+    pico8:["000000","1D2B53","7E2553","008751","AB5236","5F574F","C2C3C7","FFF1E8",
+           "FF004D","FFA300","FFEC27","00E436","29ADFF","83769C","FF77A8","FFCCAA"],
+    sweetie16:["1a1c2c","5d275d","b13e53","ef7d57","ffcd75","a7f070","38b764","257179",
+           "29366f","3b5dc9","41a6f6","73eff7","f4f4f4","94b0c2","566c86","333c57"],
+    endesga32:["be4a2f","d77643","ead4aa","e4a672","b86f50","733e39","3e2731","a22633",
+           "e43b44","f77622","feae34","fee761","63c74d","3e8948","265c42","193c3b",
+           "124e89","0099db","2ce8f5","ffffff","c0cbdc","8b9bb4","5a6988","3a4466",
+           "262b44","181425","ff0044","68386c","b55088","f6757a","e8b796","c28569"],
+    commodore64:["000000","ffffff","813338","75cec8","8e3c97","56ac4d","2e2c9b","edf171",
+           "8e5029","553800","c46c71","4a4a4a","7b7b7b","a9ff9f","706deb","b2b2b2"],
+    gameboy:["0f380f","306230","8bac0f","9bbc0f"],
+    icecreamgb:["7c3f58","eb6b6f","f9a875","fff6d3"],
+    cga:["000000","55ffff","ff55ff","ffffff"],
+    bw:["000000","ffffff"],
+    custom: []
+  };
+  const PALETTE_LABELS = {
+    db32:"DawnBringer 32", db16:"DawnBringer 16", pico8:"PICO-8 (16)",
+    sweetie16:"Sweetie 16", endesga32:"Endesga 32", commodore64:"Commodore 64 (16)",
+    gameboy:"Game Boy (4 greens)", icecreamgb:"Ice Cream GB (4)", cga:"CGA (4)",
+    bw:"1-bit black & white", custom:"Custom palette…"
+  };
+
+  function hexToRgb(h){
+    h = h.replace('#','').trim();
+    if(h.length === 3){ h = h.split('').map(c=>c+c).join(''); }
+    return [parseInt(h.substr(0,2),16), parseInt(h.substr(2,2),16), parseInt(h.substr(4,2),16)];
+  }
+
+  function parseCustomPalette(text){
+    const matches = text.match(/#?[0-9a-fA-F]{6}|#?[0-9a-fA-F]{3}\b/g) || [];
+    const seen = new Set();
+    const out = [];
+    for(const m of matches){
+      const clean = m.replace('#','').toLowerCase();
+      if(!seen.has(clean)){ seen.add(clean); out.push(clean); }
+    }
+    return out;
+  }
+
+  function paletteRgb(name){
+    let hexes;
+    if(name === 'custom'){
+      hexes = parseCustomPalette(el('customPaletteInput').value);
+      if(!hexes.length) hexes = ['000000','ffffff'];
+    } else {
+      hexes = PALETTES[name];
+    }
+    const active = hexes.filter(h => !excludedHexes.has(h.toLowerCase()));
+    const finalHexes = active.length ? active : hexes; // never allow a fully-empty palette
+    return finalHexes.map(hexToRgb);
+  }
+
+  // ---------- Dither patterns ----------
+  // Canonical recursive Bayer matrix construction (Bayer2 is the base case; each larger
+  // size is built from the previous one, exactly matching the standard ordered-dither
+  // matrices used everywhere from CRT-era graphics to modern shaders).
+  function generateBayer(size){
+    if(size === 2) return [[0,2],[3,1]];
+    const n = size/2;
+    const smaller = generateBayer(n);
+    const D2 = [[0,2],[3,1]];
+    const out = Array.from({length:size}, () => new Array(size));
+    for(let y=0;y<size;y++){
+      for(let x=0;x<size;x++){
+        const bx = x % n, by = y % n;
+        const qx = Math.floor(x/n) % 2, qy = Math.floor(y/n) % 2;
+        out[y][x] = smaller[by][bx]*4 + D2[qy][qx];
+      }
+    }
+    return out;
+  }
+  function normalizeMatrix(m){
+    const n = m.length * m[0].length;
+    return m.map(row => row.map(v => (v + 0.5) / n));
+  }
+
+  // Void-and-cluster blue noise generation (Ulichney's method): grows an initial binary
+  // pattern one pixel at a time by always filling the "largest void" (the spot farthest
+  // from existing points), then derives a full ordered-dither ranking by alternately
+  // removing the "tightest cluster" and filling the "largest void" from that halfway
+  // point. Produces a threshold matrix with no low-frequency clumping — visually much
+  // less "patterny" than Bayer's regular grid, especially at low dither densities.
+  function generateBlueNoise(N, sigma, radius){
+    const size = N*N;
+    const kernel = [];
+    for(let dy=-radius; dy<=radius; dy++){
+      for(let dx=-radius; dx<=radius; dx++){
+        const d2 = dx*dx+dy*dy;
+        kernel.push([dx, dy, Math.exp(-d2/(2*sigma*sigma))]);
+      }
+    }
+    function addEnergy(energy, x, y, sign){
+      for(const [dx,dy,w] of kernel){
+        const nx = ((x+dx)%N+N)%N, ny = ((y+dy)%N+N)%N;
+        energy[ny*N+nx] += sign*w;
+      }
+    }
+    function findExtreme(energy, mask, wantOn, wantMax){
+      let bestI=-1, bestV = wantMax ? -Infinity : Infinity;
+      for(let i=0;i<size;i++){
+        if(mask[i] !== wantOn) continue;
+        const v = energy[i];
+        if(wantMax ? v>bestV : v<bestV){ bestV=v; bestI=i; }
+      }
+      return bestI;
+    }
+
+    let mask = new Uint8Array(size);
+    let energy = new Float64Array(size);
+    let sx = Math.floor(Math.random()*N), sy = Math.floor(Math.random()*N);
+    mask[sy*N+sx] = 1;
+    addEnergy(energy, sx, sy, 1);
+    const half = Math.floor(size/2);
+    let onCount = 1;
+    while(onCount < half){
+      const idx = findExtreme(energy, mask, 0, false); // largest void
+      mask[idx] = 1;
+      addEnergy(energy, idx % N, (idx/N)|0, 1);
+      onCount++;
+    }
+
+    const ranks = new Int32Array(size).fill(-1);
+    { // ranks [0..half-1]: repeatedly remove the tightest cluster from the half-full state
+      const mask1 = mask.slice(), energy1 = energy.slice();
+      let count = half;
+      while(count > 0){
+        const idx = findExtreme(energy1, mask1, 1, true); // tightest cluster
+        mask1[idx] = 0;
+        addEnergy(energy1, idx % N, (idx/N)|0, -1);
+        count--;
+        ranks[idx] = count;
+      }
+    }
+    { // ranks [half..size-1]: repeatedly fill the largest void from the half-full state
+      const mask2 = mask.slice(), energy2 = energy.slice();
+      let count = half;
+      while(count < size){
+        const idx = findExtreme(energy2, mask2, 0, false);
+        mask2[idx] = 1;
+        addEnergy(energy2, idx % N, (idx/N)|0, 1);
+        ranks[idx] = count;
+        count++;
+      }
+    }
+    const out = Array.from({length:N}, (_, y) => Array.from({length:N}, (_, x) => ranks[y*N+x]));
+    return out;
+  }
+
+  const DITHER_PATTERNS = {
+    bayer2: normalizeMatrix(generateBayer(2)),
+    bayer4: normalizeMatrix(generateBayer(4)),
+    bayer8: normalizeMatrix(generateBayer(8)),
+    checker: [[0.25,0.75],[0.75,0.25]],
+    bluenoise: normalizeMatrix(generateBlueNoise(16, 1.5, 4))
+  };
+  function ditherThresholdAt(patternName, x, y){
+    const m = DITHER_PATTERNS[patternName] || DITHER_PATTERNS.bayer4;
+    const size = m.length;
+    return m[y % size][x % size];
+  }
+
+  // ---------- State ----------
+  let frames = []; // {name, img, w, h}
+  let outputFrames = []; // {name, canvas}
+  let animTimer = null;
+
+  const el = id => document.getElementById(id);
+  const dropzone = el('dropzone'), fileInput = el('fileInput');
+  const loadStatus = el('loadStatus');
+  const grid = el('grid');
+  const frameCount = el('frameCount');
+  const saveZipBtn = el('saveZipBtn');
+  const processBtn = el('processBtn'), clearBtn = el('clearBtn');
+  const paletteSelect = el('paletteSelect'), paletteSwatches = el('paletteSwatches');
+  const previewBox = el('previewBox'), animCanvas = el('animCanvas');
+  const downloadArea = el('downloadArea');
+
+  function naturalCompare(a,b){
+    return a.localeCompare(b, undefined, {numeric:true, sensitivity:'base'});
+  }
+
+  let excludedHexes = new Set();
+
+  function renderPaletteSwatches(){
+    const isCustom = paletteSelect.value === 'custom';
+    el('customPaletteBox').style.display = isCustom ? 'block' : 'none';
+    const hexes = isCustom ? parseCustomPalette(el('customPaletteInput').value) : PALETTES[paletteSelect.value];
+    paletteSwatches.innerHTML = '';
+    if(!hexes.length){
+      if(isCustom) paletteSwatches.innerHTML = '<span class="hint">Type colors below.</span>';
+      return;
+    }
+    hexes.forEach(h=>{
+      const key = h.toLowerCase();
+      const sw = document.createElement('div');
+      sw.className = 'swatch' + (excludedHexes.has(key) ? ' swatch-off' : '');
+      sw.style.background = '#' + h;
+      sw.title = '#' + h + ' — click to ' + (excludedHexes.has(key) ? 'enable' : 'disable');
+      sw.addEventListener('click', ()=>{
+        if(excludedHexes.has(key)) excludedHexes.delete(key); else excludedHexes.add(key);
+        renderPaletteSwatches();
+      });
+      paletteSwatches.appendChild(sw);
+    });
+    const activeCount = hexes.filter(h=>!excludedHexes.has(h.toLowerCase())).length;
+    const counter = document.createElement('div');
+    counter.className = 'hint';
+    counter.style.width = '100%';
+    counter.style.marginTop = '4px';
+    counter.textContent = `${activeCount} / ${hexes.length} active colors — click a swatch to disable it.`;
+    paletteSwatches.appendChild(counter);
+  }
+  paletteSelect.addEventListener('change', ()=>{ excludedHexes.clear(); renderPaletteSwatches(); });
+  el('customPaletteInput').addEventListener('input', renderPaletteSwatches);
+  el('lightnessWeight').addEventListener('input', ()=>{
+    el('lightnessWeightHint').textContent = `x${(parseInt(el('lightnessWeight').value,10)/10).toFixed(1)} — a higher value prioritizes preserving correct shading/form over exact hue accuracy. Only active in OKLab mode.`;
+  });
+  renderPaletteSwatches();
+
+  function updateFpsLabel(){ el('fpsLabel').textContent = el('fpsRange').value + ' fps'; }
+  updateFpsLabel();
+
+  // ---------- Loading files ----------
+  dropzone.addEventListener('click', ()=>fileInput.click());
+  ['dragenter','dragover'].forEach(ev=>dropzone.addEventListener(ev, e=>{
+    e.preventDefault(); dropzone.classList.add('drag');
+  }));
+  ['dragleave','drop'].forEach(ev=>dropzone.addEventListener(ev, e=>{
+    e.preventDefault(); dropzone.classList.remove('drag');
+  }));
+  dropzone.addEventListener('drop', e=>{
+    handleFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change', e=>handleFiles(e.target.files));
+
+  function setStatus(msg, isErr){
+    loadStatus.textContent = msg;
+    loadStatus.className = 'status' + (isErr ? ' err' : '');
+  }
+
+  async function handleFiles(fileList){
+    const files = Array.from(fileList);
+    if(!files.length) return;
+    setStatus('Loading…');
+    frames = [];
+    const diag = []; // diagnostic lines shown to the user if nothing matches
+    try{
+      for(const f of files){
+        if(/\.zip$/i.test(f.name) || f.type === 'application/zip'){
+          const zip = await JSZip.loadAsync(f);
+          const allEntries = Object.values(zip.files);
+
+          const pngEntries = allEntries.filter(e => {
+            const name = (e.name || '').trim();
+            const isRealDir = name.endsWith('/'); // don't trust JSZip's computed e.dir alone — some
+                                                    // zip tools set external attributes incorrectly,
+                                                    // which makes JSZip flag real files as directories
+            const isJunk = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$)/i.test(name) || name.split('/').pop().startsWith('._');
+            return !isRealDir && !isJunk && /\.png$/i.test(name);
+          });
+
+          if(!pngEntries.length){
+            diag.push(`ZIP "${f.name}": ${allEntries.length} entries inside, but none match the "*.png" pattern.`);
+            const sample = allEntries
+              .filter(e => !(e.name||'').endsWith('/'))
+              .slice(0, 15)
+              .map(e => `  • ${e.name}${e.dir ? '  [flagged as a folder]' : ''}`);
+            diag.push('ZIP contents (first entries):');
+            diag.push(...(sample.length ? sample : ['  (the ZIP looks empty)']));
+          } else {
+            const skipped = allEntries.length - pngEntries.length;
+            if(skipped > 0){
+              // Informational only — typically folder entries, __MACOSX/AppleDouble metadata
+              // files (macOS zips duplicate every file as "._name"), or Thumbs.db. Nothing lost.
+              diag.push(`(Skipped ${skipped} other entries in the ZIP: folders or system files like __MACOSX/Thumbs.db — this is normal and nothing was lost.)`);
+            }
+          }
+
+          for(const entry of pngEntries){
+            try{
+              const buf = await entry.async('arraybuffer');
+              // Force a correct image/png MIME type: JSZip doesn't always tag extracted
+              // blobs as image/png, and some browsers refuse to decode an <img> from a
+              // blob: URL whose declared type isn't a recognized image type.
+              const blob = new Blob([buf], {type: 'image/png'});
+              const img = await blobToImage(blob);
+              frames.push({name: entry.name.split('/').pop(), img});
+            }catch(frameErr){
+              diag.push(`Skipped frame "${entry.name}" — ${frameErr.message}`);
+            }
+          }
+        } else if(/\.png$/i.test(f.name) || f.type === 'image/png'){
+          try{
+            const buf = await f.arrayBuffer();
+            const blob = new Blob([buf], {type: 'image/png'});
+            const img = await blobToImage(blob);
+            frames.push({name: f.name, img});
+          }catch(frameErr){
+            diag.push(`Skipped file "${f.name}" — ${frameErr.message}`);
+          }
+        } else {
+          diag.push(`Skipped file "${f.name}" — not a .png or .zip.`);
+        }
+      }
+      frames.sort((a,b)=>naturalCompare(a.name,b.name));
+      if(!frames.length){
+        setStatus('No PNG files found in the selected data.\n' + diag.join('\n'), true);
+      } else {
+        setStatus(`Loaded ${frames.length} frames.` + (diag.length ? '\n' + diag.join('\n') : ''));
+      }
+      renderLoadedGrid();
+      processBtn.disabled = frames.length === 0;
+      clearBtn.disabled = frames.length === 0;
+      downloadArea.innerHTML = '';
+      saveZipBtn.disabled = true;
+      outputFrames = [];
+    }catch(err){
+      console.error(err);
+      setStatus('Loading error: ' + err.message, true);
+    }
+  }
+
+  function blobToImage(blob){
+    return new Promise((resolve,reject)=>{
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = ()=>{ resolve(img); };
+      img.onerror = ()=>{ reject(new Error('Could not decode PNG')); };
+      img.src = url;
+    });
+  }
+
+  function renderLoadedGrid(){
+    grid.innerHTML = '';
+    if(frames.length){
+      el('gridHeader').style.display = 'flex';
+      el('gridModeLabel').textContent = '📄 ORIGINAL (before conversion) — magnifier unavailable, click "Process frames"';
+      el('zoomLevel').style.display = 'none';
+    } else {
+      el('gridHeader').style.display = 'none';
+    }
+    frameCount.textContent = frames.length ? `${frames.length} frames loaded (original preview)` : 'No frames loaded';
+    frames.forEach(fr=>{
+      const cell = document.createElement('div'); cell.className='cell';
+      const c = document.createElement('canvas'); c.width = fr.img.width; c.height = fr.img.height;
+      c.getContext('2d').drawImage(fr.img,0,0);
+      const nm = document.createElement('div'); nm.className='name'; nm.textContent = fr.name;
+      cell.appendChild(c); cell.appendChild(nm);
+      grid.appendChild(cell);
+    });
+  }
+
+  clearBtn.addEventListener('click', ()=>{
+    frames = []; outputFrames = [];
+    grid.innerHTML = '<div class="hint" style="padding:8px;">Load frames to see a preview here.</div>';
+    el('gridHeader').style.display = 'none';
+    frameCount.textContent = 'No frames loaded';
+    setStatus('');
+    processBtn.disabled = true; clearBtn.disabled = true; saveZipBtn.disabled = true;
+    previewBox.style.display = 'none';
+    magnifier.style.display = 'none';
+    downloadArea.innerHTML = '';
+    stopAnim();
+  });
+
+  // ---------- Core processing ----------
+  // ---------- Color space: OKLab ----------
+  // Perceptually-uniform color space (Björn Ottosson). Euclidean distance here matches
+  // human perception of color difference much better than raw RGB — e.g. RGB tends to
+  // under-weight blue differences and over-weight green ones, which regularly leads
+  // plain-RGB nearest-color matching to pick a visibly "wrong" palette entry even
+  // though it's numerically closest in RGB terms.
+  function srgbToLinear(c){
+    c = c / 255;
+    return c <= 0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4);
+  }
+  function rgbToOklab(rgb){
+    const r = srgbToLinear(rgb[0]), g = srgbToLinear(rgb[1]), b = srgbToLinear(rgb[2]);
+    const l = 0.4122214708*r + 0.5363325363*g + 0.0514459929*b;
+    const m = 0.2119034982*r + 0.6806995451*g + 0.1073969566*b;
+    const s = 0.0883024619*r + 0.2817188376*g + 0.6299787005*b;
+    const l_ = Math.cbrt(l), m_ = Math.cbrt(m), s_ = Math.cbrt(s);
+    return [
+      0.2104542553*l_ + 0.7936177850*m_ - 0.0040720468*s_,
+      1.9779984951*l_ - 2.4285922050*m_ + 0.4505937099*s_,
+      0.0259040371*l_ + 0.7827717662*m_ - 0.8086757660*s_
+    ];
+  }
+
+  // nearestTwo works on generic 3D vectors — pass RGB triples for classic matching,
+  // or OKLab triples for perceptual matching. `palette` here is just "the list of
+  // candidate vectors in the same space as `vec`" — the caller maps results back to
+  // actual output RGB colors by index. `lightnessWeight` (optional, default 1) scales
+  // the difference on the first component only — meaningful in OKLab, where index 0 is
+  // perceptual Lightness: weighting it higher makes the matcher prioritize preserving
+  // correct shading/value over exact hue, since human eyes forgive a hue shift far more
+  // than a broken value structure (which reads as "wrong" shading on a sprite).
+  function nearestTwo(vec, paletteVecs, lightnessWeight){
+    const lw = lightnessWeight || 1;
+    let bestI=0,bestD=Infinity,secondI=0,secondD=Infinity;
+    for(let i=0;i<paletteVecs.length;i++){
+      const p = paletteVecs[i];
+      const d0=(vec[0]-p[0])*lw, d1=vec[1]-p[1], d2=vec[2]-p[2];
+      const d = d0*d0+d1*d1+d2*d2;
+      if(d<bestD){ secondD=bestD; secondI=bestI; bestD=d; bestI=i; }
+      else if(d<secondD){ secondD=d; secondI=i; }
+    }
+    return {i1:bestI, d1:Math.sqrt(bestD), i2:secondI, d2:Math.sqrt(secondD)};
+  }
+
+  // Simple Sobel edge-magnitude map over source luminance. Used to suppress dithering
+  // on genuine sprite details (thin lines, eyes, trim) so they stay crisp instead of
+  // getting speckled — dithering is meant to smooth gradients, not blur intentional
+  // linework.
+  function computeEdgeMask(sd, w, h, alphaThresh, threshold){
+    const lum = new Float32Array(w*h);
+    for(let i=0;i<w*h;i++){
+      const idx = i*4;
+      lum[i] = sd[idx+3] < alphaThresh ? 0 : (0.2126*sd[idx] + 0.7152*sd[idx+1] + 0.0722*sd[idx+2]);
+    }
+    const gxK = [-1,0,1, -2,0,2, -1,0,1];
+    const gyK = [-1,-2,-1, 0,0,0, 1,2,1];
+    const edge = new Uint8Array(w*h);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        let gx=0, gy=0, k=0;
+        for(let dy=-1; dy<=1; dy++){
+          for(let dx=-1; dx<=1; dx++){
+            const nx = Math.min(w-1, Math.max(0, x+dx));
+            const ny = Math.min(h-1, Math.max(0, y+dy));
+            const v = lum[ny*w+nx];
+            gx += v*gxK[k]; gy += v*gyK[k]; k++;
+          }
+        }
+        edge[y*w+x] = Math.sqrt(gx*gx + gy*gy) > threshold ? 1 : 0;
+      }
+    }
+    return edge;
+  }
+
+  // Same idea as computeEdgeMask, but instead of a binary "is this an edge" flag, returns
+  // the dominant local gradient direction (one of 8 compass directions) per pixel, or -1
+  // where the area is too flat to have a meaningful direction. Used by the relaxation-based
+  // quantizer to check whether a candidate color's lightness sits sensibly between its
+  // "upstream" (darker-ish) and "downstream" (lighter-ish) neighbors along that direction.
+  function computeGradientField(sd, w, h, alphaThresh){
+    const lum = new Float32Array(w*h);
+    for(let i=0;i<w*h;i++){
+      const idx = i*4;
+      lum[i] = sd[idx+3] < alphaThresh ? 0 : (0.2126*sd[idx] + 0.7152*sd[idx+1] + 0.0722*sd[idx+2]);
+    }
+    const gxK = [-1,0,1, -2,0,2, -1,0,1];
+    const gyK = [-1,-2,-1, 0,0,0, 1,2,1];
+    const dirIndex = new Int8Array(w*h).fill(-1);
+    const DIRS8_ANGLES = DIRS8.map(([dx,dy]) => Math.atan2(dy,dx));
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        let gx=0, gy=0, k=0;
+        for(let dy=-1; dy<=1; dy++){
+          for(let dx=-1; dx<=1; dx++){
+            const nx = Math.min(w-1, Math.max(0, x+dx));
+            const ny = Math.min(h-1, Math.max(0, y+dy));
+            const v = lum[ny*w+nx];
+            gx += v*gxK[k]; gy += v*gyK[k]; k++;
+          }
+        }
+        const mag = Math.sqrt(gx*gx + gy*gy);
+        if(mag < 5) continue; // too flat, no clear direction
+        const angle = Math.atan2(gy, gx);
+        let bestDir=0, bestDiff=Infinity;
+        for(let d=0; d<DIRS8.length; d++){
+          let diff = Math.abs(angle - DIRS8_ANGLES[d]);
+          if(diff > Math.PI) diff = 2*Math.PI - diff;
+          if(diff < bestDiff){ bestDiff = diff; bestDir = d; }
+        }
+        dirIndex[y*w+x] = bestDir;
+      }
+    }
+    return dirIndex;
+  }
+
+  // Relaxation-based base color assignment: instead of picking each pixel's palette color
+  // independently, iteratively re-scores every opaque pixel against ALL palette colors using
+  // four weighted criteria evaluated jointly — color match, lightness match, agreement with
+  // the neighbors' CURRENT colors (from the previous iteration), and consistency with the
+  // local shading gradient direction. Runs as synchronous ("Jacobi-style") updates — every
+  // pixel looks only at the previous iteration's state and all updates land at once — which
+  // avoids the directional bias a sequential scanline update would introduce. Returns a plain
+  // Int32Array of palette indices (or -1 for transparent), same shape as a single nearestTwo
+  // pass, so it drops into assignColors() as an alternative base picker.
+  function computeRelaxedBaseIndices(sd, w, h, opts, palette, paletteVecs, iterations){
+    const n = w*h;
+    const paletteL = paletteVecs.map(v => v[0]);
+    const isOpaque = new Uint8Array(n);
+    const pixOklab = new Array(n);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const p = y*w+x, idx = p*4;
+        if(sd[idx+3] < opts.alphaThresh) continue;
+        isOpaque[p] = 1;
+        pixOklab[p] = rgbToOklab([sd[idx], sd[idx+1], sd[idx+2]]);
+      }
+    }
+    const dirIndex = computeGradientField(sd, w, h, opts.alphaThresh);
+    const W = {color:0.4, lightness:0.3, neighbor:0.2, gradient:0.1};
+
+    // iteration 0: plain nearest OKLab color, no neighbor/gradient context yet
+    let current = new Int32Array(n).fill(-1);
+    for(let p=0;p<n;p++){
+      if(!isOpaque[p]) continue;
+      const v = pixOklab[p];
+      let bestI=0, bestD=Infinity;
+      for(let i=0;i<paletteVecs.length;i++){
+        const pv = paletteVecs[i];
+        const d = (v[0]-pv[0])**2 + (v[1]-pv[1])**2 + (v[2]-pv[2])**2;
+        if(d < bestD){ bestD = d; bestI = i; }
+      }
+      current[p] = bestI;
+    }
+
+    for(let iter=0; iter<iterations; iter++){
+      const next = current.slice();
+      for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+          const p = y*w+x;
+          if(!isOpaque[p]) continue;
+          const v = pixOklab[p];
+
+          const neighborIdxs = [];
+          for(const [dx,dy] of DIRS8){
+            const nx=x+dx, ny=y+dy;
+            if(nx<0||ny<0||nx>=w||ny>=h) continue;
+            const np = ny*w+nx;
+            if(!isOpaque[np]) continue;
+            neighborIdxs.push(current[np]);
+          }
+
+          let Lup=null, Ldown=null;
+          const dir = dirIndex[p];
+          if(dir !== -1){
+            const [dx,dy] = DIRS8[dir];
+            const upX=x-dx, upY=y-dy, downX=x+dx, downY=y+dy;
+            if(upX>=0&&upY>=0&&upX<w&&upY<h){ const up=upY*w+upX; if(isOpaque[up]) Lup = paletteL[current[up]]; }
+            if(downX>=0&&downY>=0&&downX<w&&downY<h){ const down=downY*w+downX; if(isOpaque[down]) Ldown = paletteL[current[down]]; }
+          }
+
+          let bestI = current[p], bestScore = -Infinity;
+          for(let i=0;i<palette.length;i++){
+            const pv = paletteVecs[i];
+            const colorDist = Math.sqrt((v[0]-pv[0])**2 + (v[1]-pv[1])**2 + (v[2]-pv[2])**2);
+            const colorScore = 1/(1+colorDist);
+            const lightDist = Math.abs(v[0]-pv[0]);
+            const lightnessScore = 1/(1+lightDist);
+            let neighborScore = 0;
+            if(neighborIdxs.length){
+              let matches=0;
+              for(const ni of neighborIdxs) if(ni===i) matches++;
+              neighborScore = matches/neighborIdxs.length;
+            }
+            let gradientScore = 0.5;
+            if(Lup!==null && Ldown!==null){
+              const lo = Math.min(Lup,Ldown), hi = Math.max(Lup,Ldown);
+              const candL = pv[0];
+              if(hi-lo < 1e-6){ gradientScore = 0.5; }
+              else if(candL>=lo && candL<=hi){ gradientScore = 1; }
+              else { const outside = candL<lo ? (lo-candL) : (candL-hi); gradientScore = Math.max(0, 1-outside/(hi-lo)); }
+            }
+            const score = W.color*colorScore + W.lightness*lightnessScore + W.neighbor*neighborScore + W.gradient*gradientScore;
+            if(score > bestScore){ bestScore = score; bestI = i; }
+          }
+          next[p] = bestI;
+        }
+      }
+      current = next;
+    }
+    return current;
+  }
+
+
+  // Fixes "alpha fringing": semi-transparent edge pixels in the source PNG are a blend
+  // of the foreground color and whatever was behind them when the sprite was exported
+  // (often a dark or arbitrary background), which quantizes to a jarring, "dirty" color
+  // that doesn't match either the foreground or the background — the dark speckles/halo
+  // seen right along silhouette edges. This replaces each semi-transparent pixel's RGB
+  // with the color of the nearest FULLY opaque pixel nearby, so the quantizer only ever
+  // sees clean foreground colors at the edge (alpha itself, and thus the silhouette
+  // shape, is left untouched).
+  function decontaminateEdges(sd, w, h, alphaThresh){
+    const FULLY_OPAQUE = 250;
+    const out = sd.slice();
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=(y*w+x)*4;
+        const a = sd[idx+3];
+        if(a < alphaThresh || a >= FULLY_OPAQUE) continue; // will be dropped anyway, or already clean
+        let found=-1, bestDist=Infinity;
+        const R = 2;
+        for(let dy=-R; dy<=R; dy++){
+          for(let dx=-R; dx<=R; dx++){
+            if(dx===0 && dy===0) continue;
+            const nx=x+dx, ny=y+dy;
+            if(nx<0||ny<0||nx>=w||ny>=h) continue;
+            const nidx=(ny*w+nx)*4;
+            if(sd[nidx+3] < FULLY_OPAQUE) continue;
+            const d2 = dx*dx+dy*dy;
+            if(d2 < bestDist){ bestDist = d2; found = nidx; }
+          }
+        }
+        if(found >= 0){
+          out[idx]=sd[found]; out[idx+1]=sd[found+1]; out[idx+2]=sd[found+2];
+        }
+      }
+    }
+    return out;
+  }
+
+  // Removes isolated single-pixel color outliers (pixels whose color matches none of
+  // their 8 surrounding neighbors) by replacing them with the most common neighbor
+  // color. Stricter/finer-grained than removeSmallIslands below (checks all 8
+  // neighbors, not just 4-connectivity), kept as its own independent toggle for
+  // cases where only true single-pixel noise should be touched. `ditherMask`, if
+  // given, marks pixels placed deliberately by the ordered dither pattern — these are
+  // skipped entirely so a sparse, intentional dither dot isn't mistaken for noise and
+  // erased (which would leave the dithered gradient looking patchy instead of clean).
+  function despeckle(data, w, h, ditherMask){
+    const out = data.slice();
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const p = y*w+x;
+        if(ditherMask && ditherMask[p]) continue;
+        const idx=p*4;
+        if(data[idx+3] === 0) continue;
+        const r=data[idx], g=data[idx+1], b=data[idx+2];
+        let total=0, sameCount=0;
+        const counts = new Map();
+        for(let dy=-1; dy<=1; dy++){
+          for(let dx=-1; dx<=1; dx++){
+            if(dx===0 && dy===0) continue;
+            const nx=x+dx, ny=y+dy;
+            if(nx<0||ny<0||nx>=w||ny>=h) continue;
+            const nidx=(ny*w+nx)*4;
+            if(data[nidx+3] === 0) continue;
+            total++;
+            const key = data[nidx]+','+data[nidx+1]+','+data[nidx+2];
+            if(data[nidx]===r && data[nidx+1]===g && data[nidx+2]===b) sameCount++;
+            counts.set(key, (counts.get(key)||0)+1);
+          }
+        }
+        if(total > 0 && sameCount === 0){
+          let bestKey=null, bestCount=0;
+          counts.forEach((c,k)=>{ if(c>bestCount){ bestCount=c; bestKey=k; } });
+          if(bestKey){
+            const [nr,ng,nb] = bestKey.split(',').map(Number);
+            out[idx]=nr; out[idx+1]=ng; out[idx+2]=nb;
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
+  const DIRS8 = DIRS4.concat([[1,1],[1,-1],[-1,1],[-1,-1]]);
+
+  // Generic flood fill over a boolean "belongs to this group" test. `dirs` controls
+  // connectivity: DIRS4 (default) treats only up/down/left/right as connected; DIRS8
+  // also connects diagonals — needed so a thin 1px-wide diagonal line (pixels only
+  // touching at their corners) is recognized as one continuous shape instead of a
+  // chain of isolated single-pixel "islands".
+  // Returns the list of pixel indices (p = y*w+x, NOT *4) in the component starting at p0.
+  function floodFill(w, h, visited, p0, sameGroup, dirs){
+    dirs = dirs || DIRS4;
+    const queue = [p0];
+    visited[p0] = 1;
+    const pixels = [p0];
+    let qi = 0;
+    while(qi < queue.length){
+      const p = queue[qi++];
+      const x = p % w, y = (p / w) | 0;
+      for(const [dx,dy] of dirs){
+        const nx = x+dx, ny = y+dy;
+        if(nx<0||ny<0||nx>=w||ny>=h) continue;
+        const np = ny*w+nx;
+        if(visited[np]) continue;
+        if(!sameGroup(np, p)) continue;
+        visited[np] = 1;
+        queue.push(np);
+        pixels.push(np);
+      }
+    }
+    return pixels;
+  }
+
+  // Removes small disconnected "islands" of same-colored opaque pixels (groups of up to
+  // maxSize pixels that aren't part of a larger shape). Islands bordered by another solid
+  // color are repainted with that neighbor color; islands floating in transparency with no
+  // opaque neighbor at all are simply erased. This generalizes single-pixel despeckling to
+  // small clusters (2-8px) left over from quantization, which a strict "differs from every
+  // neighbor" rule wouldn't catch since they DO match their own tiny cluster's neighbors.
+  // Uses 8-directional connectivity when grouping so thin diagonal lines (sword blades,
+  // ropes, 1px-wide diagonal strokes) are recognized as one continuous shape and never
+  // get shredded into a string of single-pixel "islands" and erased.
+  function removeSmallIslands(data, w, h, maxSize, ditherMask){
+    const out = data.slice();
+    const visited = new Uint8Array(w*h);
+    for(let p0=0; p0<w*h; p0++){
+      if(visited[p0]) continue;
+      const idx0 = p0*4;
+      if(data[idx0+3] === 0){ visited[p0] = 1; continue; } // skip transparent here; handled by fillSmallHoles
+      const r0=data[idx0], g0=data[idx0+1], b0=data[idx0+2];
+      const pixels = floodFill(w, h, visited, p0, (np) => {
+        const nidx = np*4;
+        return data[nidx+3] > 0 && data[nidx]===r0 && data[nidx+1]===g0 && data[nidx+2]===b0;
+      }, DIRS8);
+      if(pixels.length > maxSize) continue;
+      // if any pixel in this small component came from the intentional dither pattern,
+      // leave the whole component untouched — it's not quantization noise
+      if(ditherMask && pixels.some(p => ditherMask[p])) continue;
+
+      // gather border colors (opaque neighbors just outside this island, also diagonally —
+      // consistent with the 8-directional grouping used above)
+      const pixelSet = new Set(pixels);
+      const borderCounts = new Map();
+      let hasOpaqueBorder = false;
+      for(const p of pixels){
+        const x = p % w, y = (p / w) | 0;
+        for(const [dx,dy] of DIRS8){
+          const nx=x+dx, ny=y+dy;
+          if(nx<0||ny<0||nx>=w||ny>=h) continue;
+          const np = ny*w+nx;
+          if(pixelSet.has(np)) continue;
+          const nidx = np*4;
+          if(data[nidx+3] === 0) continue;
+          hasOpaqueBorder = true;
+          const key = data[nidx]+','+data[nidx+1]+','+data[nidx+2];
+          borderCounts.set(key, (borderCounts.get(key)||0)+1);
+        }
+      }
+      if(hasOpaqueBorder){
+        let bestKey=null, bestCount=0;
+        borderCounts.forEach((c,k)=>{ if(c>bestCount){ bestCount=c; bestKey=k; } });
+        const [nr,ng,nb] = bestKey.split(',').map(Number);
+        for(const p of pixels){ const i=p*4; out[i]=nr; out[i+1]=ng; out[i+2]=nb; }
+      } else {
+        // floating speck with no opaque neighbor at all — erase it entirely
+        for(const p of pixels){ const i=p*4; out[i+3]=0; }
+      }
+    }
+    return out;
+  }
+
+  // Fills small fully-enclosed transparent "holes" inside the silhouette (groups of up to
+  // maxSize transparent pixels that never touch the canvas border, i.e. aren't the real
+  // background) with the surrounding opaque color.
+  function fillSmallHoles(data, w, h, maxSize){
+    const out = data.slice();
+    const visited = new Uint8Array(w*h);
+    for(let p0=0; p0<w*h; p0++){
+      if(visited[p0]) continue;
+      const idx0 = p0*4;
+      if(data[idx0+3] > 0){ visited[p0] = 1; continue; }
+      const pixels = floodFill(w, h, visited, p0, (np) => data[np*4+3] === 0);
+      if(pixels.length > maxSize) continue;
+
+      let touchesEdge = false;
+      const pixelSet = new Set(pixels);
+      const borderCounts = new Map();
+      for(const p of pixels){
+        const x = p % w, y = (p / w) | 0;
+        if(x===0||y===0||x===w-1||y===h-1) touchesEdge = true;
+        for(const [nx,ny] of [[x+1,y],[x-1,y],[x,y+1],[x,y-1]]){
+          if(nx<0||ny<0||nx>=w||ny>=h) continue;
+          const np = ny*w+nx;
+          if(pixelSet.has(np)) continue;
+          const nidx = np*4;
+          if(data[nidx+3] === 0) continue;
+          const key = data[nidx]+','+data[nidx+1]+','+data[nidx+2];
+          borderCounts.set(key, (borderCounts.get(key)||0)+1);
+        }
+      }
+      if(touchesEdge || borderCounts.size === 0) continue; // real background, not an enclosed hole
+
+      let bestKey=null, bestCount=0;
+      borderCounts.forEach((c,k)=>{ if(c>bestCount){ bestCount=c; bestKey=k; } });
+      const [nr,ng,nb] = bestKey.split(',').map(Number);
+      for(const p of pixels){ const i=p*4; out[i]=nr; out[i+1]=ng; out[i+2]=nb; out[i+3]=255; }
+    }
+    return out;
+  }
+
+  // Assigns final palette colors for every opaque pixel, applying ordered (Bayer)
+  // dithering only where a pixel's own color sits ambiguously between its two nearest
+  // palette entries — controlled by ditherSensitivity, and further gated by the
+  // shadow/highlight and edge-protection options. If `baseIndices` is provided (from the
+  // relaxation-based quantizer), its per-pixel index is used as the "chosen" base color
+  // instead of the plain nearest-OKLab match — dithering ambiguity is then judged against
+  // that base vs. the next-closest OTHER color, so dithering still works sensibly on top
+  // of a relaxation-chosen base.
+  function assignColors(sd, w, h, opts, palette, paletteVecs, useOklab, lightnessWeight, vecFor, edgeMask, lo, hi, baseIndices){
+    const od = new Uint8ClampedArray(w*h*4);
+    const ditherMask = new Uint8Array(w*h);
+    const ditherOn = opts.ditherOn;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const p = y*w+x, idx = p*4;
+        const a = sd[idx+3];
+        if(a < opts.alphaThresh){ continue; } // stays transparent (od initialized to 0)
+        const rgb = [sd[idx], sd[idx+1], sd[idx+2]];
+        const vec = vecFor(rgb);
+
+        let i1, i2, d1, d2;
+        if(baseIndices){
+          i1 = baseIndices[p];
+          let bestI=-1, bestD=Infinity;
+          for(let i=0;i<paletteVecs.length;i++){
+            if(i === i1) continue;
+            const pv = paletteVecs[i];
+            const dd = (vec[0]-pv[0])**2 + (vec[1]-pv[1])**2 + (vec[2]-pv[2])**2;
+            if(dd < bestD){ bestD = dd; bestI = i; }
+          }
+          i2 = bestI;
+          const p1 = paletteVecs[i1];
+          d1 = Math.sqrt((vec[0]-p1[0])**2 + (vec[1]-p1[1])**2 + (vec[2]-p1[2])**2);
+          d2 = Math.sqrt(bestD);
+        } else {
+          const nn = nearestTwo(vec, paletteVecs, lightnessWeight);
+          i1=nn.i1; i2=nn.i2; d1=nn.d1; d2=nn.d2;
+        }
+        let chosen = palette[i1];
+
+        let ditherAllowedHere = ditherOn;
+        if(ditherAllowedHere && opts.shadowHighlightProtectOn){
+          const lum = (0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]) / 255;
+          if(lum < opts.shadowThresh || lum > opts.highlightThresh) ditherAllowedHere = false;
+        }
+        if(ditherAllowedHere && edgeMask && edgeMask[y*w+x]) ditherAllowedHere = false;
+
+        if(ditherAllowedHere && i1 !== i2 && (d1+d2) > 0){
+          const t = d1 / (d1 + d2);
+          if(t >= lo && t <= hi){
+            const bayerT = ditherThresholdAt(opts.ditherPattern, x, y);
+            const norm = (t - lo) / (hi - lo || 1);
+            chosen = norm > bayerT ? palette[i2] : palette[i1];
+            ditherMask[p] = 1;
+          }
+        }
+        od[idx]=chosen[0]; od[idx+1]=chosen[1]; od[idx+2]=chosen[2]; od[idx+3]=255;
+      }
+    }
+    return {od, ditherMask};
+  }
+
+  function quantizeFrame(img, opts){
+    const w = img.width, h = img.height;
+    const src = document.createElement('canvas'); src.width=w; src.height=h;
+    const sctx = src.getContext('2d');
+    sctx.drawImage(img,0,0);
+    const srcData = sctx.getImageData(0,0,w,h);
+    let sd = srcData.data;
+    if(opts.edgeCleanupOn){
+      sd = decontaminateEdges(sd, w, h, opts.alphaThresh);
+    }
+
+    const out = document.createElement('canvas'); out.width=w; out.height=h;
+    const octx = out.getContext('2d');
+    const outImg = octx.createImageData(w,h);
+
+    const palette = opts.palette;
+    const useOklab = opts.colorSpace !== 'rgb'; // default to OKLab unless explicitly set to 'rgb'
+    const paletteVecs = useOklab ? palette.map(rgbToOklab) : palette;
+    const lightnessWeight = useOklab ? opts.lightnessWeight : 1;
+    // Pixel art repeats colors constantly — cache the OKLab conversion per unique RGB
+    // triple instead of recomputing cbrt() three times for every single pixel.
+    const oklabCache = new Map();
+    function vecFor(rgb){
+      if(!useOklab) return rgb;
+      const key = (rgb[0]<<16) | (rgb[1]<<8) | rgb[2];
+      let v = oklabCache.get(key);
+      if(!v){ v = rgbToOklab(rgb); oklabCache.set(key, v); }
+      return v;
+    }
+    // sensitivity 0..45 maps to half-width around the 0.5 midpoint of the t ratio
+    const halfWidth = 0.5 * (opts.ditherSensitivity/45); // 0..0.5
+    const lo = 0.5 - halfWidth, hi = 0.5 + halfWidth;
+
+    const edgeMask = opts.edgeProtectOn ? computeEdgeMask(sd, w, h, opts.alphaThresh, opts.edgeSensitivity) : null;
+
+    // Relaxation's 4-factor scoring (color/lightness/neighbor/gradient) inherently needs a
+    // perceptual L/a/b split, so it always works in OKLab internally — regardless of the
+    // "Color matching" RGB/OKLab toggle above (that toggle only affects the plain
+    // nearest-color path and the dithering ambiguity check in assignColors). Feeding it the
+    // wrong space here was the RGB-mode bug: it needs genuine OKLab vectors, not whatever
+    // paletteVecs happens to be for the currently selected color space.
+    const relaxedBase = opts.relaxationOn
+      ? computeRelaxedBaseIndices(sd, w, h, opts, palette, palette.map(rgbToOklab), opts.relaxationIterations)
+      : null;
+    let {od, ditherMask} = assignColors(sd, w, h, opts, palette, paletteVecs, useOklab, lightnessWeight, vecFor, edgeMask, lo, hi, relaxedBase);
+
+    if(opts.despeckleOn){
+      od = despeckle(od, w, h, ditherMask);
+    }
+    if(opts.removeIslandsOn){
+      od = removeSmallIslands(od, w, h, opts.islandSize, ditherMask);
+    }
+    if(opts.fillHolesOn){
+      od = fillSmallHoles(od, w, h, opts.holeSize);
+    }
+
+    if(opts.outlineOn){
+      applyOutline(od, w, h, opts.outlineColor, opts.outlineWidth, opts.outlineDiag);
+    }
+
+    outImg.data.set(od);
+    octx.putImageData(outImg,0,0);
+    return out;
+  }
+
+  function applyOutline(data, w, h, colorRgb, thickness, diag){
+    // build alpha mask of current (already quantized) opaque pixels
+    const alphaAt = (x,y) => (x<0||y<0||x>=w||y>=h) ? 0 : data[(y*w+x)*4+3];
+    let mask = new Uint8Array(w*h);
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++) mask[y*w+x] = alphaAt(x,y) > 0 ? 1 : 0;
+
+    const neighbors4 = [[1,0],[-1,0],[0,1],[0,-1]];
+    const neighbors8 = neighbors4.concat([[1,1],[1,-1],[-1,1],[-1,-1]]);
+    const nbs = diag ? neighbors8 : neighbors4;
+
+    let current = mask;
+    for(let pass=0; pass<thickness; pass++){
+      const toAdd = [];
+      for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+          if(current[y*w+x]) continue; // only grow into background
+          let touchesForeground = false;
+          for(const [dx,dy] of nbs){
+            const nx=x+dx, ny=y+dy;
+            if(nx<0||ny<0||nx>=w||ny>=h) continue;
+            if(current[ny*w+nx]){ touchesForeground = true; break; }
+          }
+          if(touchesForeground) toAdd.push(y*w+x);
+        }
+      }
+      const next = current.slice();
+      for(const p of toAdd){
+        next[p] = 1;
+        const px = p*4;
+        data[px]=colorRgb[0]; data[px+1]=colorRgb[1]; data[px+2]=colorRgb[2]; data[px+3]=255;
+      }
+      current = next;
+    }
+  }
+
+  processBtn.addEventListener('click', ()=>{
+    if(!frames.length) return;
+    processBtn.disabled = true;
+    setStatus('Processing frames…');
+    setTimeout(()=>{ // let UI update before heavy sync work
+      try{
+        const opts = {
+          palette: paletteRgb(paletteSelect.value),
+          ditherOn: el('ditherOn').checked,
+          ditherPattern: el('ditherPattern').value,
+          ditherSensitivity: parseInt(el('ditherRange').value,10),
+          outlineOn: el('outlineOn').checked,
+          outlineColor: hexToRgb(el('outlineColor').value),
+          outlineWidth: parseInt(el('outlineWidth').value,10),
+          outlineDiag: el('outlineDiag').checked,
+          alphaThresh: parseInt(el('alphaThresh').value,10),
+          edgeCleanupOn: el('edgeCleanup').checked,
+          relaxationOn: el('relaxationOn').checked,
+          relaxationIterations: parseInt(el('relaxationIterations').value,10),
+          despeckleOn: el('despeckle').checked,
+          removeIslandsOn: el('removeIslands').checked,
+          islandSize: parseInt(el('islandSize').value,10),
+          fillHolesOn: el('fillHoles').checked,
+          holeSize: parseInt(el('holeSize').value,10),
+          colorSpace: el('colorSpace').value,
+          lightnessWeight: parseInt(el('lightnessWeight').value,10) / 10,
+          shadowHighlightProtectOn: el('shadowHighlightProtect').checked,
+          shadowThresh: parseInt(el('shadowThresh').value,10) / 100,
+          highlightThresh: parseInt(el('highlightThresh').value,10) / 100,
+          edgeProtectOn: el('edgeProtect').checked,
+          edgeSensitivity: parseInt(el('edgeSensitivity').value,10)
+        };
+        outputFrames = frames.map(fr => ({
+          name: fr.name.replace(/\.png$/i,'') + '.png',
+          canvas: quantizeFrame(fr.img, opts)
+        }));
+        if(el('skipPreview').checked){
+          frameCount.textContent = `${outputFrames.length} frames processed (preview skipped)`;
+          grid.innerHTML = '<div class="hint" style="padding:8px;">Preview skipped. Click "Save ZIP" when ready.</div>';
+          previewBox.style.display = 'none';
+          stopAnim();
+        } else {
+          renderOutputGrid();
+          setupPreview();
+        }
+        downloadArea.innerHTML = '';
+        saveZipBtn.disabled = false;
+        setStatus(`Done. Processed ${outputFrames.length} frames. Click "Save ZIP" to download the result.`);
+      }catch(err){
+        console.error(err);
+        setStatus('Processing error: ' + err.message, true);
+      }finally{
+        processBtn.disabled = false;
+      }
+    }, 30);
+  });
+
+  saveZipBtn.addEventListener('click', ()=>{
+    if(!outputFrames.length) return;
+    buildDownload();
+  });
+
+  function renderOutputGrid(){
+    grid.innerHTML = '';
+    frameCount.textContent = `${outputFrames.length} frames after conversion`;
+    el('gridHeader').style.display = outputFrames.length ? 'flex' : 'none';
+    el('gridModeLabel').textContent = '✓ PREVIEW AFTER CONVERSION — 🔍 hover to zoom in:';
+    el('zoomLevel').style.display = 'inline-block';
+    outputFrames.forEach(fr=>{
+      const cell = document.createElement('div'); cell.className='cell';
+      const c = document.createElement('canvas'); c.width = fr.canvas.width; c.height = fr.canvas.height;
+      c.getContext('2d').drawImage(fr.canvas,0,0);
+      const nm = document.createElement('div'); nm.className='name'; nm.textContent = fr.name;
+      cell.appendChild(c); cell.appendChild(nm);
+      grid.appendChild(cell);
+      attachMagnifier(cell, c, fr.name);
+    });
+  }
+
+  // ---------- Magnifier (hover zoom loupe) ----------
+  const magnifier = el('magnifier');
+  const magCanvas = el('magnifierCanvas');
+  const magLabel = el('magnifierLabel');
+  const magCtx = magCanvas.getContext('2d');
+  magCtx.imageSmoothingEnabled = false;
+  const MAG_SIZE = 220;
+  magCanvas.width = MAG_SIZE; magCanvas.height = MAG_SIZE;
+  magCanvas.style.width = MAG_SIZE + 'px'; magCanvas.style.height = MAG_SIZE + 'px';
+
+  function attachMagnifier(cellEl, canvasEl, label){
+    cellEl.addEventListener('mousemove', (e)=>{
+      const zoom = parseInt(el('zoomLevel').value, 10) || 4;
+      const rect = canvasEl.getBoundingClientRect();
+      const scaleX = canvasEl.width / rect.width;
+      const scaleY = canvasEl.height / rect.height;
+      const px = (e.clientX - rect.left) * scaleX;
+      const py = (e.clientY - rect.top) * scaleY;
+      const sampleSize = Math.max(1, Math.round(MAG_SIZE / zoom));
+      let sx = Math.floor(px - sampleSize/2);
+      let sy = Math.floor(py - sampleSize/2);
+      sx = Math.min(Math.max(sx, 0), Math.max(0, canvasEl.width - sampleSize));
+      sy = Math.min(Math.max(sy, 0), Math.max(0, canvasEl.height - sampleSize));
+      const sw = Math.min(sampleSize, canvasEl.width);
+      const sh = Math.min(sampleSize, canvasEl.height);
+
+      magCtx.imageSmoothingEnabled = false;
+      magCtx.clearRect(0,0,MAG_SIZE,MAG_SIZE);
+      magCtx.drawImage(canvasEl, sx, sy, sw, sh, 0, 0, MAG_SIZE, MAG_SIZE);
+      magLabel.textContent = `${label} — x${zoom}`;
+
+      // position near cursor, kept inside the viewport
+      const margin = 18;
+      let left = e.clientX + margin;
+      let top = e.clientY + margin;
+      const totalW = MAG_SIZE + 4, totalH = MAG_SIZE + 20;
+      if(left + totalW > window.innerWidth) left = e.clientX - margin - totalW;
+      if(top + totalH > window.innerHeight) top = e.clientY - margin - totalH;
+      magnifier.style.left = Math.max(4,left) + 'px';
+      magnifier.style.top = Math.max(4,top) + 'px';
+      magnifier.style.display = 'block';
+    });
+    cellEl.addEventListener('mouseleave', ()=>{ magnifier.style.display = 'none'; });
+  }
+  attachMagnifier(animCanvas, animCanvas, 'Animation preview');
+
+  // ---------- Animated preview ----------
+  function setupPreview(){
+    previewBox.style.display = 'flex';
+    const w = outputFrames[0].canvas.width, h = outputFrames[0].canvas.height;
+    const scale = Math.max(1, Math.min(8, Math.round(256/Math.max(w,h))));
+    animCanvas.width = w*scale; animCanvas.height = h*scale;
+    stopAnim();
+    startAnim();
+  }
+  function stopAnim(){ if(animTimer){ clearInterval(animTimer); animTimer=null; } }
+  function startAnim(){
+    stopAnim(); // always clear any previous interval first, or FPS changes stack intervals and the preview flickers
+    let i = 0;
+    const ctx = animCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    function draw(){
+      if(!outputFrames.length) return;
+      const useAfter = el('previewMode').value === 'after';
+      const src = useAfter ? outputFrames[i % outputFrames.length].canvas : frames[i % frames.length].img;
+      ctx.clearRect(0,0,animCanvas.width, animCanvas.height);
+      ctx.drawImage(src, 0,0, animCanvas.width, animCanvas.height);
+      if(el('animOn').checked) i++;
+    }
+    draw();
+    const fps = parseInt(el('fpsRange').value,10) || 8;
+    animTimer = setInterval(draw, 1000/fps);
+  }
+  el('fpsRange').addEventListener('input', ()=>{ updateFpsLabel(); if(outputFrames.length) startAnim(); });
+  el('animOn').addEventListener('change', ()=>{ if(outputFrames.length) startAnim(); });
+  el('previewMode').addEventListener('change', ()=>{});
+
+  // ---------- Download ----------
+  function triggerDownload(blob, filename){
+    // Robust download helper: verifies the blob, forces an automatic download,
+    // and falls back to opening the file in a new tab if the click is blocked
+    // (this can happen when the page is running inside a sandboxed preview/iframe
+    // rather than a normal browser tab).
+    if(!blob || blob.size === 0){
+      throw new Error('The generated file is empty (0 bytes) — download aborted.');
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    let autoClickFailed = false;
+    try{
+      a.click();
+    }catch(e){
+      autoClickFailed = true;
+    }
+    setTimeout(()=>{ document.body.removeChild(a); }, 1000);
+    return {url, autoClickFailed};
+  }
+
+  async function buildDownload(){
+    downloadArea.innerHTML = '<span class="hint">Packing ZIP…</span>';
+    try{
+      const zip = new JSZip();
+      let totalBytes = 0;
+      for(const fr of outputFrames){
+        const blob = await new Promise(res => fr.canvas.toBlob(res, 'image/png'));
+        if(!blob || blob.size === 0) throw new Error('Failed to encode frame ' + fr.name + ' (canvas returned an empty blob).');
+        totalBytes += blob.size;
+        zip.file(fr.name, blob);
+      }
+      const zipBlob = await zip.generateAsync({type:'blob'});
+      if(!zipBlob || zipBlob.size < totalBytes * 0.5){
+        // sanity check: a valid zip of PNGs should be roughly as large as the sum of its parts
+        // (PNG is already compressed, so the zip won't shrink much — if it's far smaller, something went wrong)
+        console.warn('Zip size looks suspicious', zipBlob && zipBlob.size, 'vs frames total', totalBytes);
+      }
+      const {url} = triggerDownload(zipBlob, 'sprite-forge-output.zip');
+
+      downloadArea.innerHTML = '';
+      const a = document.createElement('a');
+      a.href = url; a.download = 'sprite-forge-output.zip'; a.className='dl';
+      a.textContent = 'Download ZIP again (' + (zipBlob.size/1024).toFixed(0) + ' KB)';
+      downloadArea.appendChild(a);
+
+      const note = document.createElement('div');
+      note.className = 'hint';
+      note.style.marginTop = '6px';
+      note.style.maxWidth = '360px';
+      note.textContent = 'The download should start automatically. If the ZIP turns out corrupted or 0 KB: this usually means the page is running inside a sandboxed preview (e.g. a chat window) — download the HTML file to disk and open it directly in a browser (double-click / drag into Chrome), then downloading works normally.';
+      downloadArea.appendChild(note);
+    }catch(err){
+      console.error(err);
+      downloadArea.innerHTML = '';
+      const errBox = document.createElement('div');
+      errBox.className = 'status err';
+      errBox.textContent = 'Error creating ZIP: ' + err.message + ' — try opening this HTML file directly in a browser (not in a chat preview) and try again.';
+      downloadArea.appendChild(errBox);
+    }
+  }
+
+})();
+</script>
+</body>
+</html>
