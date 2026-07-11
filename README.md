@@ -98,3 +98,23 @@ A 2D skeletal animation tool built for pixel art sprites:
 - Project save/load as JSON
 
 ---
+
+## Anim Mesh Forge
+
+*Keyframe mesh animator.*
+
+Deforms a single sprite over time using a mesh of vertices, instead of frame-by-frame redrawing:
+
+- Auto-generate a grid mesh or a mesh from the sprite's alpha channel, or draw one manually on the PNG
+- Add/delete vertices and re-triangulate the mesh
+- Select/Move and Deform tools for posing the mesh per frame
+- Keyframe-based animation with linear, ease-in, ease-out, bounce, and elastic interpolation
+- Frame-by-frame navigation (first/prev/next/last) plus play/stop preview
+- Undo/redo
+- Export as PNG frame sequence in a ZIP
+
+---
+
+## License
+
+MIT
