@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anim Mesh Forge – Keyframe Mesh Animator</title>
+<style>
+:root {
+  --bg:       #0d0e10;
+  --panel:    #14151a;
+  --panel2:   #1a1b21;
+  --border:   #252629;
+  --border2:  #353639;
+  --text:     #d0d1d5;
+  --muted:    #606268;
+  --accent:   #e8900a;
+  --accent2:  #c44f00;
+  --green:    #38b07a;
+  --blue:     #4a8fe8;
+  --red:      #c04040;
+  --vtx:      #e8900a;
+  --mono:     'Cascadia Code','Fira Code',monospace;
+  --ui:       'Segoe UI',system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--ui);font-size:12px;display:flex;flex-direction:column;user-select:none}
+
+/* ── HEADER ── */
+header{display:flex;align-items:center;gap:10px;padding:0 12px;height:40px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{font-size:14px;font-weight:700;letter-spacing:.04em;color:var(--accent);white-space:nowrap}
+.logo span{color:var(--text);font-weight:400}
+.vsep{width:1px;height:18px;background:var(--border2);flex-shrink:0}
+.toolbar{display:flex;align-items:center;gap:2px;flex:1;flex-wrap:nowrap;overflow-x:auto}
+.tb{background:transparent;border:1px solid transparent;border-radius:4px;color:var(--muted);cursor:pointer;font-size:11px;padding:3px 9px;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:color .12s,border-color .12s,background .12s}
+.tb:hover{color:var(--text);border-color:var(--border2)}
+.tb.active{color:var(--accent);border-color:var(--accent);background:rgba(232,144,10,.09)}
+.tb.green{color:var(--green);border-color:var(--green);background:rgba(56,176,122,.09)}
+.tb.red{color:var(--red);border-color:var(--red)}
+.btn{background:var(--border2);border:1px solid var(--border2);border-radius:4px;color:var(--text);cursor:pointer;font-size:11px;padding:3px 9px;transition:background .12s;white-space:nowrap}
+.btn:hover{background:#44454a}
+.btn.primary{background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600}
+.btn.primary:hover{background:#d65f10}
+
+/* ── BODY ── */
+.body{display:flex;flex:1;overflow:hidden}
+
+/* ── SIDEBAR LEFT ── */
+.sidebar{width:210px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+.ss{border-bottom:1px solid var(--border);padding:9px 11px}
+.ss h3{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;margin-bottom:7px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-bottom:5px}
+.row label{color:var(--muted);font-size:11px;flex-shrink:0}
+.row input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer;height:3px}
+.val{min-width:28px;text-align:right;color:var(--text);font-family:var(--mono);font-size:10px}
+.row input[type=number]{width:52px;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-size:11px;padding:2px 4px;text-align:right}
+.row input[type=number]:focus{outline:1px solid var(--accent);border-color:transparent}
+.tog-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;cursor:pointer}
+.tog-row label{color:var(--text);font-size:11px;cursor:pointer}
+.tog{width:28px;height:15px;background:var(--border2);border-radius:7px;position:relative;transition:background .15s;flex-shrink:0}
+.tog.on{background:var(--accent2)}
+.tog::after{content:'';position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:50%;background:#fff;transition:left .15s}
+.tog.on::after{left:15px}
+.sb-btn{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:4px;color:var(--text);cursor:pointer;font-size:11px;padding:5px 8px;margin-bottom:3px;text-align:left;transition:border-color .12s,color .12s}
+.sb-btn:hover{border-color:var(--accent);color:var(--accent)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:3px 8px}
+.stat .k{color:var(--muted);font-size:10px}
+.stat .v{color:var(--accent);font-size:15px;font-weight:700;font-family:var(--mono)}
+.easing-select{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-size:11px;padding:3px 5px}
+.easing-select:focus{outline:1px solid var(--accent)}
+select option{background:var(--panel2)}
+
+/* ── CANVAS AREA ── */
+.canvas-area{flex:1;position:relative;overflow:hidden;background:var(--bg);background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:20px 20px}
+#mainCanvas{position:absolute;top:0;left:0;cursor:crosshair;image-rendering:pixelated}
+
+/* ── DROP OVERLAY ── */
+#dropOverlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:10}
+.drop-box{border:2px dashed var(--border2);border-radius:12px;padding:40px 56px;text-align:center;cursor:pointer;transition:border-color .15s}
+.drop-box:hover,.drop-box.drag-over{border-color:var(--accent)}
+.drop-icon{font-size:40px;margin-bottom:10px}
+.drop-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px}
+.drop-sub{color:var(--muted);font-size:12px}
+.drop-btn{margin-top:12px;padding:7px 18px;background:var(--accent2);border:none;border-radius:5px;color:#fff;font-size:12px;font-weight:600;cursor:pointer}
+
+/* ── TIMELINE ── */
+.timeline{height:132px;flex-shrink:0;background:var(--panel);border-top:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.tl-header{display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.tl-header .tl-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.tl-controls{display:flex;align-items:center;gap:4px;margin-left:auto}
+.tl-btn{background:transparent;border:1px solid var(--border2);border-radius:3px;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 7px;transition:color .12s,border-color .12s}
+.tl-btn:hover{color:var(--text);border-color:var(--border2)}
+.tl-btn.play{color:var(--green);border-color:var(--green)}
+.tl-btn.play.playing{color:var(--red);border-color:var(--red)}
+.tl-fps{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+.tl-fps input{width:36px;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-size:11px;padding:1px 4px;text-align:right}
+.tl-body{display:flex;flex:1;overflow:hidden}
+.tl-labels{width:72px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;padding-top:20px;overflow:hidden}
+.tl-label{height:28px;display:flex;align-items:center;padding:0 8px;color:var(--muted);font-size:10px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden}
+.tl-scroll{flex:1;overflow-x:auto;overflow-y:hidden;position:relative}
+.tl-canvas-wrap{position:relative;height:100%}
+#tlCanvas{display:block;cursor:default}
+
+/* ── STATUS BAR ── */
+.statusbar{display:flex;align-items:center;gap:12px;padding:0 12px;height:24px;background:var(--panel);border-top:1px solid var(--border);flex-shrink:0;font-size:10px;color:var(--muted);font-family:var(--mono)}
+.statusbar .mode{color:var(--accent);font-weight:700}
+#sb-coords,#sb-frame,#sb-hint{white-space:nowrap}
+
+/* ── MODAL ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border2);border-radius:8px;padding:18px 22px;width:420px;max-height:80vh;overflow-y:auto}
+.modal h2{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px}
+.modal p{color:var(--muted);font-size:11px;margin-bottom:10px;line-height:1.6}
+.progress-bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:var(--green);width:0%;transition:width .1s}
+.modal-footer{display:flex;gap:6px;margin-top:14px;justify-content:flex-end}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* ── HELP MODAL ── */
+.help-step{border-left:3px solid var(--border2);padding:10px 14px;margin-bottom:10px;border-radius:0 6px 6px 0;background:var(--panel2)}
+.help-step.first-step{border-left-color:var(--accent);background:rgba(232,144,10,.07)}
+.help-step-num{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.help-step.first-step .help-step-num{color:var(--accent)}
+.help-step-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:5px}
+.help-step-body{font-size:11px;color:var(--muted);line-height:1.65}
+.help-step-body b{color:var(--text)}
+.help-step-body em{color:var(--accent);font-style:normal}
+.help-step-body code{font-family:var(--mono);font-size:10px;background:var(--bg);padding:1px 4px;border-radius:3px;color:var(--accent)}
+.help-section{margin-top:12px}
+.help-sec-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.help-table{width:100%;border-collapse:collapse;font-size:11px}
+.help-table tr{border-bottom:1px solid var(--border)}
+.help-table td{padding:4px 8px;color:var(--muted)}
+.help-table td:nth-child(odd){font-family:var(--mono);color:var(--accent);width:28%;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">AnimMesh<span>Forge</span></div>
+  <div class="vsep"></div>
+  <div class="toolbar">
+    <button class="tb active" id="btn-select" onclick="setMode('select')" title="Select/Move (V)">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><path d="M2 2l3.5 8 1.2-3L10 5.5z"/></svg>Select
+    </button>
+    <button class="tb" id="btn-add" onclick="setMode('add')" title="Add Vertex (A)">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><circle cx="6" cy="6" r="2.5"/><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg>Add Vertex
+    </button>
+    <button class="tb" id="btn-delete-vtx" onclick="deleteSelected()" title="Delete selected vertices (Del)">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><circle cx="6" cy="6" r="2.5"/><line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/></svg>Del Vertex
+    </button>
+    <button class="tb" id="btn-deform" onclick="setMode('deform')" title="Deform (D)">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><path d="M2 9 C4 5,8 7,10 2"/><circle cx="2" cy="9" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="2" r="1.5" fill="currentColor" stroke="none"/></svg>Deform
+    </button>
+    <div class="vsep"></div>
+    <button class="tb" onclick="autoMeshGrid()" title="Generate grid mesh">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" rx="1"/><line x1="1" y1="4.3" x2="11" y2="4.3"/><line x1="1" y1="7.7" x2="11" y2="7.7"/><line x1="4.3" y1="1" x2="4.3" y2="11"/><line x1="7.7" y1="1" x2="7.7" y2="11"/></svg>Grid Mesh
+    </button>
+    <button class="tb" onclick="autoMeshAlpha()" title="Generate mesh from alpha">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><polygon points="6,1 11,10 1,10"/><line x1="3.5" y1="10" x2="8.5" y2="10"/><line x1="6" y1="4" x2="6" y2="8"/></svg>Alpha Mesh
+    </button>
+    <button class="tb" onclick="triangulate()" title="Re-triangulate">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><polygon points="6,2 11,10 1,10"/><line x1="6" y1="2" x2="6" y2="10"/><line x1="1" y1="10" x2="8.5" y2="6"/></svg>Triangulate
+    </button>
+    <div class="vsep"></div>
+    <button class="tb" onclick="addKeyframe()" title="Set keyframe at current frame (K)">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1" transform="rotate(45 6 6)"/></svg>Set Keyframe
+    </button>
+    <button class="tb" onclick="removeKeyframe()" title="Remove keyframe (Shift+K)">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1" transform="rotate(45 6 6)"/><line x1="4" y1="4" x2="8" y2="8"/></svg>Del Keyframe
+    </button>
+    <button class="tb" onclick="resetDeform()" title="Reset deformation on current frame">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><path d="M2 6a4 4 0 1 0 4-4"/><polyline points="2,2 2,6 6,6"/></svg>Reset Frame
+    </button>
+    <div class="vsep"></div>
+    <button class="tb" id="btn-undo" onclick="undo()" title="Undo (Ctrl+Z)" style="opacity:.35">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><path d="M2 4a4 4 0 1 1 0 4"/><polyline points="2,1 2,4.5 5.5,4.5"/></svg>Undo
+    </button>
+    <button class="tb" id="btn-redo" onclick="redo()" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" style="opacity:.35">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 12 12"><path d="M10 4a4 4 0 1 0 0 4"/><polyline points="10,1 10,4.5 6.5,4.5"/></svg>Redo
+    </button>
+  </div>
+  <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+    <button class="btn primary" onclick="triggerExport()">Export ZIP</button>
+    <button class="btn" onclick="triggerLoad()">Load Sprite</button>
+    <button class="btn" onclick="openHelp()" title="Help">?</button>
+  </div>
+</header>
+
+<!-- BODY -->
+<div class="body">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="ss">
+      <h3>Mesh Stats</h3>
+      <div class="stats">
+        <div class="stat"><span class="k">Vertices</span><div class="v" id="s-verts">0</div></div>
+        <div class="stat"><span class="k">Triangles</span><div class="v" id="s-tris">0</div></div>
+        <div class="stat"><span class="k">Keyframes</span><div class="v" id="s-keys">0</div></div>
+        <div class="stat"><span class="k">Total Frames</span><div class="v" id="s-frames">0</div></div>
+      </div>
+    </div>
+
+    <div class="ss">
+      <h3>Grid Mesh</h3>
+      <div class="row"><label>Cols</label><input type="number" id="grid-cols" value="8" min="2" max="40"><span class="val"></span></div>
+      <div class="row"><label>Rows</label><input type="number" id="grid-rows" value="6" min="2" max="40"><span class="val"></span></div>
+    </div>
+
+    <div class="ss">
+      <h3>Alpha Mesh</h3>
+      <div class="row">
+        <label>Thresh</label>
+        <input type="range" id="sl-alpha" min="1" max="240" value="10" oninput="sv(this,'v-alpha')">
+        <span class="val" id="v-alpha">10</span>
+      </div>
+      <div class="row">
+        <label>Simplify</label>
+        <input type="range" id="sl-simp" min="0" max="20" value="3" step=".5" oninput="sv(this,'v-simp')">
+        <span class="val" id="v-simp">3</span>
+      </div>
+      <div class="row">
+        <label>Interior</label>
+        <input type="range" id="sl-int" min="0" max="80" value="16" oninput="sv(this,'v-int')">
+        <span class="val" id="v-int">16</span>
+      </div>
+    </div>
+
+    <div class="ss">
+      <h3>Interpolation</h3>
+      <select class="easing-select" id="sel-easing">
+        <option value="linear">Linear</option>
+        <option value="ease-in">Ease In</option>
+        <option value="ease-out">Ease Out</option>
+        <option value="ease-inout" selected>Ease In-Out</option>
+        <option value="bounce">Bounce</option>
+        <option value="elastic">Elastic</option>
+        <option value="step">Step (no interp)</option>
+      </select>
+    </div>
+
+    <div class="ss">
+      <h3>Animation</h3>
+      <div class="row"><label>Total Frames</label><input type="number" id="inp-total" value="24" min="2" max="240" onchange="setTotalFrames(this.value)"></div>
+      <div class="row"><label>FPS</label><input type="number" id="inp-fps2" value="12" min="1" max="60" onchange="fps=+this.value;document.getElementById('inp-fps').value=this.value"></div>
+    </div>
+
+    <div class="ss">
+      <h3>Export</h3>
+      <div class="row"><label>Scale</label>
+        <select class="easing-select" id="sel-scale" style="width:auto;flex:1">
+          <option value="1">1× original</option>
+          <option value="2">2× original</option>
+          <option value="4">4× original</option>
+          <option value="0.5">0.5× original</option>
+        </select>
+      </div>
+      <div class="tog-row" onclick="toggleOpt('exportMesh')"><label>Draw Mesh on PNG</label><div class="tog" id="tog-exportMesh"></div></div>
+    </div>
+
+    <div class="ss">
+      <h3>Display</h3>
+      <div class="tog-row" onclick="toggleOpt('showSprite')"><label>Show Sprite</label><div class="tog on" id="tog-showSprite"></div></div>
+      <div class="tog-row" onclick="toggleOpt('showMesh')"><label>Show Mesh</label><div class="tog on" id="tog-showMesh"></div></div>
+      <div class="tog-row" onclick="toggleOpt('showVerts')"><label>Show Vertices</label><div class="tog on" id="tog-showVerts"></div></div>
+      <div class="row" style="margin-top:4px">
+        <label>Opacity</label>
+        <input type="range" id="sl-opa" min="0" max="100" value="80" oninput="sv(this,'v-opa');spriteOpacity=this.value/100;render()">
+        <span class="val" id="v-opa">80</span>
+      </div>
+    </div>
+
+    <div class="ss">
+      <h3>Mesh</h3>
+      <button class="sb-btn" onclick="clearMesh()">Clear Mesh</button>
+      <button class="sb-btn" onclick="clearAll()">Clear All</button>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-area" id="canvasArea">
+    <canvas id="mainCanvas"></canvas>
+    <div id="dropOverlay">
+      <div class="drop-box" id="dropBox">
+        <div class="drop-icon">🎬</div>
+        <div class="drop-title">Drop a sprite here</div>
+        <div class="drop-sub">PNG with transparency recommended</div>
+        <button class="drop-btn" onclick="triggerLoad()">Browse…</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /body -->
+
+<!-- TIMELINE -->
+<div class="timeline">
+  <div class="tl-header">
+    <span class="tl-title">Timeline</span>
+    <div class="tl-controls">
+      <button class="tl-btn" onclick="goToFrame(0)" title="First frame">⏮</button>
+      <button class="tl-btn" onclick="stepFrame(-1)" title="Prev frame">◀</button>
+      <button class="tl-btn play" id="btn-play" onclick="togglePlay()" title="Play/Stop (Space)">▶ Play</button>
+      <button class="tl-btn" onclick="stepFrame(1)" title="Next frame">▶</button>
+      <button class="tl-btn" onclick="goToFrame(totalFrames-1)" title="Last frame">⏭</button>
+      <div class="vsep" style="margin:0 4px"></div>
+      <span class="tl-fps">FPS <input type="number" id="inp-fps" value="12" min="1" max="60" onchange="fps=+this.value;document.getElementById('inp-fps2').value=this.value"></span>
+      <div class="vsep" style="margin:0 4px"></div>
+      <button class="tl-btn" onclick="addKeyframe()" style="color:var(--accent);border-color:var(--accent)">◆ Key</button>
+      <span style="color:var(--muted);font-size:10px;margin-left:4px" id="tl-frame-label">Frame 0</span>
+    </div>
+  </div>
+  <div class="tl-body">
+    <div class="tl-labels">
+      <div class="tl-label" style="height:20px;font-size:9px;border-bottom:1px solid var(--border)">FRAME</div>
+      <div class="tl-label">Mesh</div>
+    </div>
+    <div class="tl-scroll" id="tlScroll">
+      <div class="tl-canvas-wrap" id="tlWrap">
+        <canvas id="tlCanvas" height="88"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <span class="mode" id="sb-mode">SELECT</span>
+  <span>|</span>
+  <span id="sb-coords">x:— y:—</span>
+  <span>|</span>
+  <span id="sb-frame">Frame 0 / 23</span>
+  <span>|</span>
+  <span id="sb-hint">Load a sprite to begin</span>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-bg" id="exportModal">
+  <div class="modal">
+    <h2>Export Frames → ZIP</h2>
+    <p id="exp-status">Rendering frames…</p>
+    <div class="progress-bar"><div class="progress-fill" id="exp-progress"></div></div>
+    <p id="exp-detail" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></p>
+    <div class="modal-footer">
+      <button class="btn" id="exp-close" onclick="closeExportModal()" disabled>Close</button>
+      <button class="btn primary" id="exp-download" onclick="downloadZIP()" disabled>Download ZIP</button>
+    </div>
+  </div>
+</div>
+
+<!-- HELP MODAL -->
+<div class="modal-bg" id="helpModal">
+  <div class="modal" style="width:560px;max-height:85vh">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h2 style="margin:0">AnimMesh Forge — Help</h2>
+      <button class="btn" onclick="closeHelp()" style="padding:2px 10px;font-size:13px">✕</button>
+    </div>
+
+    <div class="help-step first-step">
+      <div class="help-step-num">First Step</div>
+      <div class="help-step-title">Load a sprite &amp; generate a mesh</div>
+      <div class="help-step-body">
+        Click <b>Load Sprite</b> (or drag &amp; drop a PNG). Then choose a mesh type:<br>
+        • <b>Grid Mesh</b> — uniform N×M grid, best for flags, cloth, water surfaces.<br>
+        • <b>Alpha Mesh</b> — auto-traces the opaque area, good for characters &amp; irregular shapes.<br>
+        Adjust cols/rows or Alpha Threshold, then click the button. You can also place vertices
+        manually with <b>Add Vertex</b> mode and hit <b>Triangulate</b> when done.
+      </div>
+    </div>
+
+    <div class="help-step">
+      <div class="help-step-num">2</div>
+      <div class="help-step-title">Pose &amp; set keyframes</div>
+      <div class="help-step-body">
+        Switch to <b>Deform</b> mode (D). Drag one or more vertices to pose the mesh.
+        When you release the mouse a keyframe is <em>automatically saved</em> at the current frame.<br>
+        Move to a different frame on the Timeline, pose again — repeat for each key pose.<br>
+        You can also press <b>K</b> to manually commit the current pose as a keyframe,
+        or <b>Shift+K</b> to remove the keyframe on the current frame.
+      </div>
+    </div>
+
+    <div class="help-step">
+      <div class="help-step-num">3</div>
+      <div class="help-step-title">Edit vertices</div>
+      <div class="help-step-body">
+        • <b>Select</b> mode (V): click to select, Shift+click to multi-select, drag to box-select.<br>
+        • <b>Add Vertex</b> (A): click anywhere on the sprite to place a new vertex. Mesh re-triangulates automatically.<br>
+        • <b>Del Vertex</b>: select one or more vertices, then click the button or press <b>Delete</b>/<b>Backspace</b>.<br>
+        • Ctrl+A selects all. Esc clears the selection.
+      </div>
+    </div>
+
+    <div class="help-step">
+      <div class="help-step-num">4</div>
+      <div class="help-step-title">Preview the animation</div>
+      <div class="help-step-body">
+        Press <b>Space</b> to play/stop. Use ◀ ▶ buttons or ← → arrow keys to step through frames.
+        Click anywhere on the Timeline ruler to jump to that frame.
+        The mesh is interpolated between keyframes using the easing curve set in the sidebar.
+      </div>
+    </div>
+
+    <div class="help-step">
+      <div class="help-step-num">5</div>
+      <div class="help-step-title">Export as PNG frames in ZIP</div>
+      <div class="help-step-body">
+        Click <b>Export ZIP</b>. Each frame is rendered to a separate PNG
+        (<code>frame_0000.png</code>, <code>frame_0001.png</code>, …) and packed into a ZIP.
+        Scale factor and optional mesh overlay can be set in the Export sidebar section.
+        The export uses pixel-perfect nearest-neighbour sampling — no blending.
+      </div>
+    </div>
+
+    <div class="help-section">
+      <div class="help-sec-title">Keyboard shortcuts</div>
+      <table class="help-table">
+        <tr><td>V</td><td>Select mode</td><td>A</td><td>Add Vertex mode</td></tr>
+        <tr><td>D</td><td>Deform mode</td><td>Del / Backspace</td><td>Delete selected vertices</td></tr>
+        <tr><td>K</td><td>Set keyframe</td><td>Shift+K</td><td>Remove keyframe</td></tr>
+        <tr><td>Space</td><td>Play / Stop</td><td>← →</td><td>Step frame</td></tr>
+        <tr><td>Ctrl+Z</td><td>Undo</td><td>Ctrl+Y / Ctrl+Shift+Z</td><td>Redo</td></tr>
+        <tr><td>Ctrl+A</td><td>Select all</td><td>Esc</td><td>Deselect all</td></tr>
+      </table>
+    </div>
+
+    <div class="modal-footer" style="margin-top:18px">
+      <button class="btn primary" onclick="closeHelp()">Got it</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/png,image/webp,image/gif" style="display:none" onchange="loadFile(this)">
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  ANIM MESH FORGE – engine
+// ══════════════════════════════════════════════════════════════
+
+const canvas  = document.getElementById('mainCanvas');
+const ctx     = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const area    = document.getElementById('canvasArea');
+const tlCanvas= document.getElementById('tlCanvas');
+const tlCtx   = tlCanvas.getContext('2d');
+tlCtx.imageSmoothingEnabled = false;
+
+// ── Global state ──
+let sprite    = null;
+let spriteW   = 0, spriteH = 0;
+let alphaMap  = null;
+
+let viewOffX  = 0, viewOffY = 0, viewScale = 1;
+
+// Vertices: {x, y, ox, oy}  — ox/oy = rest position in sprite pixels
+let verts = [];
+let tris  = [];
+let edges = new Set();
+
+// Keyframes: Map<frameIndex, Float32Array>  — positions of all verts at that frame
+// Format: [v0x, v0y, v1x, v1y, ...]
+let keyframes = new Map();
+
+let totalFrames = 24;
+let currentFrame = 0;
+let fps = 12;
+let playing = false;
+let playTimer = null;
+
+// Interaction
+let mode    = 'select';
+let selIdx  = new Set();
+let hovIdx  = -1;
+let dragging = false, dragStart = null, boxSel = null;
+let spriteOpacity = 0.8;
+const opts  = { showSprite:true, showMesh:true, showVerts:true, exportMesh:false };
+
+// Export buffer
+let exportZipData = null;
+
+// ── Undo / Redo ───────────────────────────────────────────────
+const undoStack = [];
+const redoStack = [];
+const UNDO_LIMIT = 60;
+
+function snapshotState(){
+  return {
+    verts:        verts.map(v=>({...v})),
+    tris:         tris.map(t=>[...t]),
+    edges:        new Set(edges),
+    keyframes:    new Map([...keyframes].map(([f,a])=>[f,new Float32Array(a)])),
+    currentFrame: currentFrame,
+  };
+}
+function pushUndo(){
+  undoStack.push(snapshotState());
+  if(undoStack.length>UNDO_LIMIT) undoStack.shift();
+  redoStack.length=0;
+  updateUndoButtons();
+}
+function applySnapshot(snap){
+  verts        = snap.verts.map(v=>({...v}));
+  tris         = snap.tris.map(t=>[...t]);
+  edges        = new Set(snap.edges);
+  keyframes    = new Map([...snap.keyframes].map(([f,a])=>[f,new Float32Array(a)]));
+  currentFrame = snap.currentFrame;
+  interpolateFrame(currentFrame);
+}
+function undo(){
+  if(!undoStack.length) return;
+  redoStack.push(snapshotState());
+  applySnapshot(undoStack.pop());
+  render(); renderTimeline(); updateUI(); updateUndoButtons();
+  hint('Undo');
+}
+function redo(){
+  if(!redoStack.length) return;
+  undoStack.push(snapshotState());
+  applySnapshot(redoStack.pop());
+  render(); renderTimeline(); updateUI(); updateUndoButtons();
+  hint('Redo');
+}
+function updateUndoButtons(){
+  const u=document.getElementById('btn-undo'), r=document.getElementById('btn-redo');
+  if(u) u.style.opacity = undoStack.length ? '1' : '0.35';
+  if(r) r.style.opacity = redoStack.length ? '1' : '0.35';
+}
+
+// ── Keyboard ──────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  if (e.key==='v'||e.key==='V') setMode('select');
+  if (e.key==='a'||e.key==='A') setMode('add');
+  if (e.key==='d'||e.key==='D') setMode('deform');
+  if ((e.ctrlKey||e.metaKey)&&e.key==='z') { e.preventDefault(); undo(); return; }
+  if ((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))) { e.preventDefault(); redo(); return; }
+  if (e.key==='k'||e.key==='K') { if(e.shiftKey) removeKeyframe(); else addKeyframe(); }
+  if (e.key===' ') { e.preventDefault(); togglePlay(); }
+  if (e.key==='ArrowRight') { e.preventDefault(); stepFrame(1); }
+  if (e.key==='ArrowLeft')  { e.preventDefault(); stepFrame(-1); }
+  if (e.key==='Delete'||e.key==='Backspace') deleteSelected();
+  if (e.key==='Escape') { selIdx.clear(); render(); updateUI(); }
+  if ((e.ctrlKey||e.metaKey)&&e.key==='a') { e.preventDefault(); selIdx=new Set(verts.map((_,i)=>i)); render(); updateUI(); }
+});
+
+// ── Mode ──────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  ['select','add','deform'].forEach(n => document.getElementById('btn-'+n)?.classList.toggle('active', n===m));
+  canvas.style.cursor = m==='add' ? 'cell' : m==='deform' ? 'grab' : 'crosshair';
+  updateUI();
+}
+
+// ── Utilities ─────────────────────────────────────────────────
+function sv(el, id) { document.getElementById(id).textContent = el.value; }
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+function lerp(a,b,t){return a+(b-a)*t;}
+function edgeKey(a,b){return a<b?`${a}-${b}`:`${b}-${a}`;}
+
+// ── File load ─────────────────────────────────────────────────
+function triggerLoad(){ document.getElementById('fileInput').click(); }
+function loadFile(inp){ if(inp.files[0]) loadImage(inp.files[0]); }
+
+const dropBox = document.getElementById('dropBox');
+dropBox.addEventListener('dragover', e=>{ e.preventDefault(); dropBox.classList.add('drag-over'); });
+dropBox.addEventListener('dragleave', ()=>dropBox.classList.remove('drag-over'));
+dropBox.addEventListener('drop', e=>{ e.preventDefault(); dropBox.classList.remove('drag-over'); if(e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]); });
+
+function loadImage(file){
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = async ()=>{
+    sprite  = await createImageBitmap(img);
+    spriteW = sprite.width; spriteH = sprite.height;
+    extractAlpha();
+    document.getElementById('dropOverlay').style.display = 'none';
+    fitView();
+    clearMesh();
+    hint('Sprite loaded — generate a mesh, then deform & set keyframes');
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+function extractAlpha(){
+  const tmp = document.createElement('canvas');
+  tmp.width=spriteW; tmp.height=spriteH;
+  const tc=tmp.getContext('2d');
+  tc.drawImage(sprite,0,0);
+  const id=tc.getImageData(0,0,spriteW,spriteH);
+  alphaMap=new Uint8Array(spriteW*spriteH);
+  for(let i=0;i<alphaMap.length;i++) alphaMap[i]=id.data[i*4+3];
+}
+
+// ── View ──────────────────────────────────────────────────────
+function fitView(){
+  const W=area.clientWidth, H=area.clientHeight, pad=50;
+  viewScale = Math.min((W-pad*2)/spriteW, (H-pad*2)/spriteH);
+  viewOffX  = (W - spriteW*viewScale)/2;
+  viewOffY  = (H - spriteH*viewScale)/2;
+  canvas.width=W; canvas.height=H;
+}
+window.addEventListener('resize',()=>{ if(sprite) fitView(); else resizeCanvas(); render(); renderTimeline(); });
+function resizeCanvas(){ canvas.width=area.clientWidth; canvas.height=area.clientHeight; }
+resizeCanvas();
+
+function canvasToSprite(cx,cy){ return {x:(cx-viewOffX)/viewScale, y:(cy-viewOffY)/viewScale}; }
+function spriteToCanvas(sx,sy){ return {x:sx*viewScale+viewOffX, y:sy*viewScale+viewOffY}; }
+
+// ── Picking ───────────────────────────────────────────────────
+const PICK_R = 7;
+function pickVertex(cx,cy){
+  let best=-1, bestD2=PICK_R*PICK_R;
+  for(let i=0;i<verts.length;i++){
+    const cv=spriteToCanvas(verts[i].x,verts[i].y);
+    const d2=(cx-cv.x)**2+(cy-cv.y)**2;
+    if(d2<bestD2){best=i;bestD2=d2;}
+  }
+  return best;
+}
+
+// ── Mouse ─────────────────────────────────────────────────────
+canvas.addEventListener('mousemove', onMM);
+canvas.addEventListener('mousedown', onMD);
+canvas.addEventListener('mouseup',   onMU);
+canvas.addEventListener('mouseleave',()=>{ hovIdx=-1; render(); });
+
+function getXY(e){ const r=canvas.getBoundingClientRect(); return {mx:e.clientX-r.left, my:e.clientY-r.top}; }
+
+function onMM(e){
+  const {mx,my}=getXY(e);
+  const sp=canvasToSprite(mx,my);
+  document.getElementById('sb-coords').textContent=`x:${Math.round(sp.x)} y:${Math.round(sp.y)}`;
+  if(dragging&&dragStart){
+    if(dragStart.vtxDrag){
+      const dx=(mx-dragStart.mx)/viewScale, dy=(my-dragStart.my)/viewScale;
+      for(const s of dragStart.snaps){ verts[s.i].x=clamp(s.ox+dx,0,spriteW); verts[s.i].y=clamp(s.oy+dy,0,spriteH); }
+      render(); return;
+    }
+    boxSel={x1:dragStart.mx,y1:dragStart.my,x2:mx,y2:my};
+    render(); return;
+  }
+  const h=pickVertex(mx,my);
+  if(h!==hovIdx){hovIdx=h;render();}
+}
+
+function onMD(e){
+  if(e.button!==0) return;
+  const {mx,my}=getXY(e);
+  const sp=canvasToSprite(mx,my);
+  if(mode==='add'){
+    if(sp.x>=0&&sp.x<=spriteW&&sp.y>=0&&sp.y<=spriteH){
+      pushUndo();
+      addVertex(sp.x,sp.y);
+    }
+    return;
+  }
+  const hit=pickVertex(mx,my);
+  if(hit>=0){
+    if(!e.shiftKey&&!selIdx.has(hit)) selIdx.clear();
+    selIdx.has(hit)?selIdx.delete(hit):selIdx.add(hit);
+    dragging=true;
+    // Snapshot positions at drag start for undo + moved detection
+    dragStart={mx,my,vtxDrag:true,snaps:[...selIdx].map(i=>({i,ox:verts[i].x,oy:verts[i].y}))};
+    canvas.style.cursor='grabbing';
+  } else {
+    if(!e.shiftKey) selIdx.clear();
+    dragging=true; dragStart={mx,my,vtxDrag:false}; boxSel=null;
+  }
+  render(); updateUI();
+}
+
+function onMU(){
+  if(boxSel){
+    const x1=Math.min(boxSel.x1,boxSel.x2),x2=Math.max(boxSel.x1,boxSel.x2);
+    const y1=Math.min(boxSel.y1,boxSel.y2),y2=Math.max(boxSel.y1,boxSel.y2);
+    for(let i=0;i<verts.length;i++){
+      const cv=spriteToCanvas(verts[i].x,verts[i].y);
+      if(cv.x>=x1&&cv.x<=x2&&cv.y>=y1&&cv.y<=y2) selIdx.add(i);
+    }
+  }
+  // Auto-keyframe: if deforming and vertices actually moved, commit a keyframe
+  if(dragStart?.vtxDrag && mode==='deform'){
+    const moved = dragStart.snaps.some(s=>
+      Math.abs(verts[s.i].x-s.ox)>0.01 || Math.abs(verts[s.i].y-s.oy)>0.01
+    );
+    if(moved){
+      pushUndo();
+      _commitKeyframe();
+      hint(`Auto-keyframe at frame ${currentFrame}`);
+    }
+  }
+  dragging=false; dragStart=null; boxSel=null;
+  if(mode!=='add') canvas.style.cursor=mode==='deform'?'grab':'crosshair';
+  render(); renderTimeline(); updateUI();
+}
+
+// ── Vertex ops ────────────────────────────────────────────────
+function addVertex(sx,sy){
+  verts.push({x:sx,y:sy,ox:sx,oy:sy});
+  triangulate();
+}
+function deleteSelected(){
+  if(!selIdx.size) return;
+  pushUndo();
+  const oldLen = verts.length;
+  // remap[oldIdx] = newIdx, or -1 if deleted
+  const remap = new Array(oldLen).fill(-1);
+  let c = 0;
+  for(let i=0;i<oldLen;i++) if(!selIdx.has(i)) remap[i]=c++;
+
+  // Reverse map: newIdx -> oldIdx (used to copy keyframe data into correct slot)
+  const newLen = c;
+  const oldOf  = new Array(newLen);
+  for(let i=0;i<oldLen;i++) if(remap[i]>=0) oldOf[remap[i]]=i;
+
+  verts = verts.filter((_,i)=>remap[i]>=0);
+  tris  = tris.map(t=>t.map(i=>remap[i])).filter(t=>t.every(v=>v>=0));
+  edges = new Set();
+  for(const [a,b,cc] of tris){ edges.add(edgeKey(a,b)); edges.add(edgeKey(b,cc)); edges.add(edgeKey(a,cc)); }
+
+  // Remap keyframe arrays: new slot i gets data from old slot oldOf[i]
+  for(const [f,pos] of keyframes){
+    const newPos=new Float32Array(newLen*2);
+    for(let i=0;i<newLen;i++){
+      newPos[i*2]   = pos[oldOf[i]*2];
+      newPos[i*2+1] = pos[oldOf[i]*2+1];
+    }
+    keyframes.set(f, newPos);
+  }
+
+  selIdx.clear(); hovIdx=-1;
+  triangulate();
+}
+
+// ── Triangulation (Bowyer–Watson Delaunay) ────────────────────
+function triangulate(){
+  if(verts.length<3){tris=[];edges=new Set();render();updateUI();return;}
+  const pts=verts.map(v=>[v.x,v.y]);
+  const n=pts.length;
+  const minX=Math.min(...pts.map(p=>p[0]))-1, minY=Math.min(...pts.map(p=>p[1]))-1;
+  const maxX=Math.max(...pts.map(p=>p[0]))+1, maxY=Math.max(...pts.map(p=>p[1]))+1;
+  const dm=Math.max(maxX-minX,maxY-minY)*10;
+  const mx=(minX+maxX)/2, my=(minY+maxY)/2;
+  const sup=[[mx-20*dm,my-dm],[mx,my+20*dm],[mx+20*dm,my-dm]];
+  const all=[...pts,...sup];
+  let triList=[[n,n+1,n+2]];
+  for(let p=0;p<n;p++){
+    const bad=[],poly=[];
+    for(const t of triList){ const cc=circ(all,t); if(cc){ const dx=all[p][0]-cc.x,dy=all[p][1]-cc.y; if(dx*dx+dy*dy<cc.r2) bad.push(t); } }
+    for(const t of bad){ for(let e=0;e<3;e++){ const edge=[t[e],t[(e+1)%3]]; if(!bad.some(t2=>t2!==t&&t2.includes(edge[0])&&t2.includes(edge[1]))) poly.push(edge); } }
+    triList=triList.filter(t=>!bad.includes(t));
+    for(const edge of poly) triList.push([edge[0],edge[1],p]);
+  }
+  tris=triList.filter(t=>!t.some(v=>v>=n)).map(t=>[...t]);
+  edges=new Set();
+  for(const [a,b,c] of tris){ edges.add(edgeKey(a,b)); edges.add(edgeKey(b,c)); edges.add(edgeKey(a,c)); }
+  render(); updateUI();
+}
+function circ(pts,[a,b,c]){
+  const ax=pts[a][0],ay=pts[a][1],bx=pts[b][0],by=pts[b][1],cx=pts[c][0],cy=pts[c][1];
+  const D=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+  if(Math.abs(D)<1e-10) return null;
+  const ux=((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/D;
+  const uy=((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/D;
+  const dx=ax-ux,dy=ay-uy;
+  return{x:ux,y:uy,r2:dx*dx+dy*dy};
+}
+
+// ── Grid mesh ─────────────────────────────────────────────────
+function autoMeshGrid(){
+  if(!sprite) return;
+  pushUndo();
+  const cols=parseInt(document.getElementById('grid-cols').value)||8;
+  const rows=parseInt(document.getElementById('grid-rows').value)||6;
+  verts=[];
+  for(let r=0;r<=rows;r++) for(let c=0;c<=cols;c++){
+    const x=spriteW*c/cols, y=spriteH*r/rows;
+    verts.push({x,y,ox:x,oy:y});
+  }
+  keyframes.clear(); currentFrame=0;
+  triangulate();
+  hint(`Grid mesh: ${verts.length} vertices (${cols}×${rows})`);
+}
+
+// ── Alpha mesh ────────────────────────────────────────────────
+function autoMeshAlpha(){
+  if(!alphaMap) return;
+  pushUndo();
+  const thresh=parseInt(document.getElementById('sl-alpha').value);
+  const simp=parseFloat(document.getElementById('sl-simp').value)||0.1;
+  const interior=parseInt(document.getElementById('sl-int').value);
+  const contour=marchContour(thresh);
+  if(!contour.length){hint('No opaque pixels at this threshold');return;}
+  const simplified=dpSimplify(contour,simp);
+  const inner=poissonInterior(thresh,interior);
+  verts=[];
+  for(const [x,y] of simplified) verts.push({x,y,ox:x,oy:y});
+  for(const [x,y] of inner)      verts.push({x,y,ox:x,oy:y});
+  keyframes.clear(); currentFrame=0;
+  triangulate();
+  hint(`Alpha mesh: ${verts.length} vertices, ${tris.length} triangles`);
+}
+
+function marchContour(thresh){
+  const W=spriteW,H=spriteH;
+  const pts=[];
+  let sx=-1,sy=-1;
+  outer:for(let y=0;y<H;y++) for(let x=0;x<W;x++) if(alphaMap[y*W+x]>=thresh){sx=x;sy=y;break outer;}
+  if(sx<0) return [];
+  const dx8=[1,1,0,-1,-1,-1,0,1],dy8=[0,1,1,1,0,-1,-1,-1];
+  let cx=sx,cy=sy,pbx=cx-1,pby=cy,step=0;
+  do {
+    pts.push([cx,cy]);
+    let bDir=0;
+    for(let d=0;d<8;d++) if(cx+dx8[d]===pbx&&cy+dy8[d]===pby){bDir=d;break;}
+    let found=false;
+    for(let i=1;i<=8;i++){
+      const nd=(bDir+i)%8,nx=cx+dx8[nd],ny=cy+dy8[nd];
+      if(nx<0||nx>=W||ny<0||ny>=H||alphaMap[ny*W+nx]<thresh){pbx=nx;pby=ny;}
+      else{cx=nx;cy=ny;found=true;break;}
+    }
+    if(!found) break;
+    step++;
+  } while((cx!==sx||cy!==sy)&&step<W*H);
+  if(pts.length>600){const skip=Math.ceil(pts.length/600);return pts.filter((_,i)=>i%skip===0);}
+  return pts;
+}
+
+function dpSimplify(pts,eps){
+  if(pts.length<=2) return pts;
+  let maxD=0,idx=0;
+  const end=pts.length-1;
+  for(let i=1;i<end;i++){const d=ptLineDist(pts[i],pts[0],pts[end]);if(d>maxD){maxD=d;idx=i;}}
+  if(maxD>eps){return[...dpSimplify(pts.slice(0,idx+1),eps).slice(0,-1),...dpSimplify(pts.slice(idx),eps)];}
+  return[pts[0],pts[end]];
+}
+function ptLineDist([px,py],[ax,ay],[bx,by]){
+  const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
+  if(!l2) return Math.hypot(px-ax,py-ay);
+  const t=clamp(((px-ax)*dx+(py-ay)*dy)/l2,0,1);
+  return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
+}
+function poissonInterior(thresh,count){
+  if(!count) return [];
+  const W=spriteW,H=spriteH,pts=[],md=Math.sqrt(W*H/Math.max(1,count))*.5,md2=md*md;
+  let tries=0;
+  while(pts.length<count&&tries<count*40){
+    tries++;
+    const x=Math.random()*W,y=Math.random()*H;
+    const xi=Math.round(x),yi=Math.round(y);
+    if(xi<0||xi>=W||yi<0||yi>=H||alphaMap[yi*W+xi]<thresh) continue;
+    if(pts.some(([px,py])=>(x-px)**2+(y-py)**2<md2)) continue;
+    pts.push([x,y]);
+  }
+  return pts;
+}
+
+// ── Deform reset ──────────────────────────────────────────────
+function resetDeform(){
+  pushUndo();
+  for(const v of verts){v.x=v.ox;v.y=v.oy;}
+  render(); updateUI();
+}
+
+// ── Clear ─────────────────────────────────────────────────────
+function clearMesh(){
+  verts=[];tris=[];edges=new Set();keyframes=new Map();selIdx.clear();hovIdx=-1;currentFrame=0;
+  render();updateUI();renderTimeline();
+}
+function clearAll(){
+  sprite=null;alphaMap=null;clearMesh();
+  document.getElementById('dropOverlay').style.display='';
+  resizeCanvas();render();
+}
+
+// ── Toggle display opts ───────────────────────────────────────
+function toggleOpt(k){
+  opts[k]=!opts[k];
+  const t=document.getElementById('tog-'+k);
+  if(t) t.classList.toggle('on',opts[k]);
+  render();
+}
+
+// ── Total frames ──────────────────────────────────────────────
+function setTotalFrames(v){
+  totalFrames=Math.max(2,Math.min(240,+v));
+  document.getElementById('inp-total').value=totalFrames;
+  if(currentFrame>=totalFrames) goToFrame(totalFrames-1);
+  renderTimeline(); updateUI();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  KEYFRAME SYSTEM
+// ══════════════════════════════════════════════════════════════
+
+// Internal: write current vertex positions into keyframes map (no undo push)
+function _commitKeyframe(){
+  if(!verts.length) return;
+  const pos=new Float32Array(verts.length*2);
+  for(let i=0;i<verts.length;i++){pos[i*2]=verts[i].x;pos[i*2+1]=verts[i].y;}
+  keyframes.set(currentFrame,pos);
+  renderTimeline(); updateUI();
+}
+
+// Public: manual keyframe — push undo first
+function addKeyframe(){
+  if(!verts.length){hint('No mesh to keyframe');return;}
+  pushUndo();
+  _commitKeyframe();
+  hint(`Keyframe set at frame ${currentFrame}`);
+}
+
+function removeKeyframe(){
+  if(!keyframes.has(currentFrame)) return;
+  pushUndo();
+  keyframes.delete(currentFrame);
+  renderTimeline(); updateUI();
+  hint(`Keyframe removed from frame ${currentFrame}`);
+}
+
+// Get sorted keyframe list
+function sortedKeys(){ return [...keyframes.keys()].sort((a,b)=>a-b); }
+
+// Easing functions
+function applyEasing(t, type){
+  switch(type){
+    case 'linear':   return t;
+    case 'ease-in':  return t*t*t;
+    case 'ease-out': return 1-(1-t)**3;
+    case 'ease-inout': return t<.5?4*t*t*t:1-(-2*t+2)**3/2;
+    case 'bounce':   {
+      if(t<1/2.75) return 7.5625*t*t;
+      if(t<2/2.75){t-=1.5/2.75; return 7.5625*t*t+.75;}
+      if(t<2.5/2.75){t-=2.25/2.75; return 7.5625*t*t+.9375;}
+      t-=2.625/2.75; return 7.5625*t*t+.984375;
+    }
+    case 'elastic': {
+      if(t===0||t===1) return t;
+      const c4=(2*Math.PI)/3;
+      return -(Math.pow(2,10*t-10)*Math.sin((t*10-10.75)*c4));
+    }
+    case 'step': return t<1?0:1;
+    default: return t;
+  }
+}
+
+// Interpolate all vertex positions at frame f
+function interpolateFrame(f){
+  if(!verts.length||!keyframes.size) return;
+  const keys=sortedKeys();
+  const easing=document.getElementById('sel-easing').value;
+
+  // Find surrounding keyframes
+  let k0=null,k1=null;
+  for(const k of keys){ if(k<=f) k0=k; }
+  for(const k of [...keys].reverse()){ if(k>=f) k1=k; }
+
+  if(k0===null&&k1===null) return;
+
+  if(k0===null){
+    // Before first keyframe: use first
+    const pos=keyframes.get(k1);
+    for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}
+    return;
+  }
+  if(k1===null){
+    // After last keyframe: use last
+    const pos=keyframes.get(k0);
+    for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}
+    return;
+  }
+  if(k0===k1){
+    const pos=keyframes.get(k0);
+    for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}
+    return;
+  }
+
+  // Lerp between k0 and k1
+  const rawT=(f-k0)/(k1-k0);
+  const t=applyEasing(rawT,easing);
+  const p0=keyframes.get(k0),p1=keyframes.get(k1);
+  for(let i=0;i<verts.length;i++){
+    verts[i].x=lerp(p0[i*2],p1[i*2],t);
+    verts[i].y=lerp(p0[i*2+1],p1[i*2+1],t);
+  }
+}
+
+// ── Frame navigation ──────────────────────────────────────────
+function goToFrame(f){
+  // If we're in deform mode and on a keyframe, save current positions first
+  if(mode==='deform'&&keyframes.has(currentFrame)){
+    const pos=new Float32Array(verts.length*2);
+    for(let i=0;i<verts.length;i++){pos[i*2]=verts[i].x;pos[i*2+1]=verts[i].y;}
+    keyframes.set(currentFrame,pos);
+  }
+  currentFrame=clamp(f,0,totalFrames-1);
+  interpolateFrame(currentFrame);
+  render(); renderTimeline(); updateUI();
+}
+
+function stepFrame(d){ goToFrame(currentFrame+d); }
+
+// ── Playback ──────────────────────────────────────────────────
+function togglePlay(){
+  playing=!playing;
+  const btn=document.getElementById('btn-play');
+  btn.textContent=playing?'■ Stop':'▶ Play';
+  btn.classList.toggle('playing',playing);
+  if(playing) scheduleNext(); else { clearTimeout(playTimer); }
+}
+function scheduleNext(){
+  if(!playing) return;
+  playTimer=setTimeout(()=>{
+    currentFrame=(currentFrame+1)%totalFrames;
+    interpolateFrame(currentFrame);
+    render(); renderTimeline(); updateUI();
+    scheduleNext();
+  }, 1000/fps);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════════════════
+function render(){
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  if(!sprite) return;
+
+  // Pixel-art: never allow any smoothing
+  ctx.imageSmoothingEnabled = false;
+
+  // Sprite + deformed warp (always rendered together)
+  if(opts.showSprite){
+    const hasDeform=tris.length&&verts.some(v=>Math.abs(v.x-v.ox)>.01||Math.abs(v.y-v.oy)>.01);
+    if(hasDeform){
+      renderWarpedSprite();
+    } else {
+      ctx.save(); ctx.globalAlpha=spriteOpacity; ctx.imageSmoothingEnabled=false;
+      ctx.drawImage(sprite,viewOffX,viewOffY,spriteW*viewScale,spriteH*viewScale);
+      ctx.restore();
+    }
+  }
+
+  // Mesh lines
+  if(opts.showMesh){
+    for(const [a,b,c] of tris){
+      const pa=spriteToCanvas(verts[a].x,verts[a].y);
+      const pb=spriteToCanvas(verts[b].x,verts[b].y);
+      const pc=spriteToCanvas(verts[c].x,verts[c].y);
+      ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.lineTo(pc.x,pc.y); ctx.closePath();
+      const anyS=selIdx.has(a)||selIdx.has(b)||selIdx.has(c);
+      ctx.fillStyle=anyS?'rgba(232,144,10,.2)':'rgba(232,144,10,.07)';
+      ctx.fill();
+    }
+    ctx.lineWidth=1;
+    for(const key of edges){
+      const[ai,bi]=key.split('-').map(Number);
+      const pa=spriteToCanvas(verts[ai].x,verts[ai].y);
+      const pb=spriteToCanvas(verts[bi].x,verts[bi].y);
+      const s=selIdx.has(ai)||selIdx.has(bi);
+      ctx.strokeStyle=s?'rgba(232,144,10,.8)':'rgba(232,144,10,.35)';
+      ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke();
+    }
+  }
+
+  // Box selection
+  if(boxSel){
+    const{x1,y1,x2,y2}=boxSel;
+    ctx.save(); ctx.strokeStyle='rgba(232,144,10,.7)'; ctx.fillStyle='rgba(232,144,10,.07)';
+    ctx.lineWidth=1; ctx.setLineDash([4,3]);
+    ctx.strokeRect(Math.min(x1,x2),Math.min(y1,y2),Math.abs(x2-x1),Math.abs(y2-y1));
+    ctx.fillRect(Math.min(x1,x2),Math.min(y1,y2),Math.abs(x2-x1),Math.abs(y2-y1));
+    ctx.restore();
+  }
+
+  // Vertices
+  if(opts.showVerts){
+    for(let i=0;i<verts.length;i++){
+      const cv=spriteToCanvas(verts[i].x,verts[i].y);
+      const s=selIdx.has(i), h=i===hovIdx;
+      ctx.beginPath(); ctx.arc(cv.x,cv.y,s?5.5:h?5:3.5,0,Math.PI*2);
+      ctx.fillStyle=s?'#fff':h?'#ffe566':'#e8900a';
+      ctx.strokeStyle=s?'#e8900a':'rgba(0,0,0,.5)';
+      ctx.lineWidth=s?1.5:1; ctx.fill(); ctx.stroke();
+      if(verts.length<=40){
+        ctx.fillStyle=s?'#fff':'rgba(255,255,255,.45)';
+        ctx.font='9px monospace'; ctx.textAlign='left';
+        ctx.fillText(i,cv.x+6,cv.y+3);
+      }
+    }
+  }
+}
+
+// ── Affine warp ───────────────────────────────────────────────
+// Root cause of colour mixing: drawing multiple clipped triangles onto a
+// shared canvas accumulates alpha through the default 'source-over'
+// compositing.  Pixels on triangle edges get blended with whatever was
+// already there → colour fringing.
+//
+// Fix: three-buffer approach, all in sprite-space.
+//   _triCanvas  – single-triangle scratch buffer.  Each triangle is drawn
+//                 here in isolation (full sprite with affine warp, no clip).
+//   _maskCanvas – same size, used to rasterise the triangle's silhouette as
+//                 a 1-bit mask.
+//   _warpCanvas – accumulates the final image using 'copy' compositing so
+//                 each triangle REPLACES what was underneath; no blending.
+//
+// The accumulation step:
+//   1. Render warped sprite into _triCanvas (full size, no clip).
+//   2. Draw filled triangle on _maskCanvas (white on black).
+//   3. On _warpCanvas: use _triCanvas as source, _maskCanvas as mask via
+//      'destination-in' — but the simplest Canvas 2D equivalent is:
+//      a) stamp the triangle polygon into _warpCanvas using 'source-over'
+//         with the sprite content clipped to that polygon.
+//      b) Use globalCompositeOperation='source-atop' to write pixels only
+//         where the destination (accumulator) has alpha.
+//
+// Simpler & robust: render each triangle into its own isolated offscreen
+// and composite it onto the accumulator with 'source-over', but FIRST erase
+// the accumulator region covered by this triangle using 'destination-out'
+// then 'source-over'.  This prevents double-blending at shared edges.
+//
+// Actually the cleanest approach for pixel art:
+//   Per-triangle: warp full sprite → tmp, then copy only the triangle region
+//   onto the accumulator using 'destination-out' + 'source-over' pattern,
+//   or simply: clear that region then stamp.  Since polygons tile perfectly
+//   (Delaunay), using 'source-over' with a pre-cleared accumulator and
+//   drawing each triangle exactly once with NO alpha on the accumulator
+//   background works — the issue is only when transparent pixels from one
+//   triangle land on opaque pixels from another.
+//
+// Correct solution: render each tri to _triCanvas, clip-copy to _warpCanvas
+// using composite='copy' per-triangle region so existing pixels are replaced,
+// not blended.
+
+// ── Pixel-perfect warp — ImageData rasterizer ────────────────
+// Canvas 2D compositing (even destination-out) anti-aliases polygon edges,
+// causing colour mixing at triangle boundaries in pixel art.
+// Solution: bypass the GPU entirely. For each output pixel, use barycentric
+// coordinates to find which triangle owns it, compute the source UV via
+// inverse affine, and copy the exact source RGBA — no interpolation.
+//
+// _srcPixels  : Uint8ClampedArray of the original sprite (read once per frame)
+// _dstCanvas  : output buffer blitted to screen
+let _srcPixels  = null;   // cached sprite pixel data
+let _srcVersion = -1;     // sprite identity (width*height, reset on load)
+let _dstCanvas  = null, _dstCtx = null;
+
+function _getSrcPixels(){
+  // Read sprite pixels once; re-read only if sprite changed
+  const key = spriteW * 10000 + spriteH;
+  if(_srcVersion !== key || !_srcPixels){
+    const tmp = document.createElement('canvas');
+    tmp.width=spriteW; tmp.height=spriteH;
+    const tc=tmp.getContext('2d'); tc.imageSmoothingEnabled=false;
+    tc.drawImage(sprite,0,0);
+    _srcPixels  = tc.getImageData(0,0,spriteW,spriteH).data;
+    _srcVersion = key;
+  }
+  return _srcPixels;
+}
+
+function renderWarpedSprite(){
+  // Ensure output buffer
+  if(!_dstCanvas){ _dstCanvas=document.createElement('canvas'); _dstCtx=_dstCanvas.getContext('2d'); }
+  if(_dstCanvas.width!==spriteW||_dstCanvas.height!==spriteH){
+    _dstCanvas.width=spriteW; _dstCanvas.height=spriteH;
+  }
+
+  const src = _getSrcPixels();
+  const dst = _dstCtx.createImageData(spriteW, spriteH);
+  const d   = dst.data;
+  const W   = spriteW, H = spriteH;
+
+  // For each triangle, precompute the inverse affine (dest→src mapping)
+  // and rasterise its bounding box pixel by pixel.
+  for(const[ai,bi,ci] of tris){
+    const va=verts[ai], vb=verts[bi], vc=verts[ci];
+
+    // Destination triangle corners (deformed positions)
+    const dx0=va.x, dy0=va.y;
+    const dx1=vb.x, dy1=vb.y;
+    const dx2=vc.x, dy2=vc.y;
+
+    // Source triangle corners (rest positions)
+    const sx0=va.ox, sy0=va.oy;
+    const sx1=vb.ox, sy1=vb.oy;
+    const sx2=vc.ox, sy2=vc.oy;
+
+    // Inverse affine: given a pixel (px,py) in dest-space, find (u,v) in src-space.
+    // We solve the barycentric system for the dest triangle, then reconstruct src.
+    // Barycentric denominator for dest triangle:
+    const denom = (dy1-dy2)*(dx0-dx2) + (dx2-dx1)*(dy0-dy2);
+    if(Math.abs(denom)<1e-6) continue;
+    const inv = 1/denom;
+
+    // Bounding box of destination triangle, clamped to sprite bounds
+    const minX = Math.max(0,  Math.floor(Math.min(dx0,dx1,dx2)));
+    const maxX = Math.min(W-1, Math.ceil(Math.max(dx0,dx1,dx2)));
+    const minY = Math.max(0,  Math.floor(Math.min(dy0,dy1,dy2)));
+    const maxY = Math.min(H-1, Math.ceil(Math.max(dy0,dy1,dy2)));
+
+    for(let py=minY; py<=maxY; py++){
+      for(let px=minX; px<=maxX; px++){
+        // Barycentric coords of pixel centre (px+0.5, py+0.5) in dest triangle
+        const pcx=px+0.5, pcy=py+0.5;
+        const w0 = ((dy1-dy2)*(pcx-dx2) + (dx2-dx1)*(pcy-dy2)) * inv;
+        const w1 = ((dy2-dy0)*(pcx-dx2) + (dx0-dx2)*(pcy-dy2)) * inv;
+        const w2 = 1 - w0 - w1;
+        // Strict interior test — pixel belongs to this triangle only
+        if(w0 < 0 || w1 < 0 || w2 < 0) continue;
+
+        // Map to source position via same barycentric weights
+        const su = w0*sx0 + w1*sx1 + w2*sx2;
+        const sv = w0*sy0 + w1*sy1 + w2*sy2;
+
+        // Nearest-neighbour source pixel
+        const sxi = Math.round(su) | 0;
+        const syi = Math.round(sv) | 0;
+        if(sxi<0||sxi>=W||syi<0||syi>=H) continue;
+
+        // Copy RGBA directly — no blending whatsoever
+        const si = (syi*W + sxi) * 4;
+        const di = (py *W + px ) * 4;
+        d[di  ] = src[si  ];
+        d[di+1] = src[si+1];
+        d[di+2] = src[si+2];
+        d[di+3] = src[si+3];
+      }
+    }
+  }
+
+  _dstCtx.putImageData(dst, 0, 0);
+
+  // Blit to main canvas with view transform
+  ctx.save();
+  ctx.globalAlpha = spriteOpacity;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(_dstCanvas, viewOffX, viewOffY, spriteW*viewScale, spriteH*viewScale);
+  ctx.restore();
+}
+
+// affineMapSprite kept for export renderer (still used there)
+function affineMapSprite(x1,y1,x2,y2,x3,y3, u1,v1,u2,v2,u3,v3){
+  const denom = (x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2));
+  if(Math.abs(denom)<1e-8) return null;
+  const a = (u1*(y2-y3) + u2*(y3-y1) + u3*(y1-y2)) / denom;
+  const c = (u1*(x3-x2) + u2*(x1-x3) + u3*(x2-x1)) / denom;
+  const e = (u1*(x2*y3-x3*y2) + u2*(x3*y1-x1*y3) + u3*(x1*y2-x2*y1)) / denom;
+  const b = (v1*(y2-y3) + v2*(y3-y1) + v3*(y1-y2)) / denom;
+  const d = (v1*(x3-x2) + v2*(x1-x3) + v3*(x2-x1)) / denom;
+  const f = (v1*(x2*y3-x3*y2) + v2*(x3*y1-x1*y3) + v3*(x1*y2-x2*y1)) / denom;
+  return [a, b, c, d, e, f];
+}
+
+// ══════════════════════════════════════════════════════════════
+//  TIMELINE RENDER
+// ══════════════════════════════════════════════════════════════
+const TL_CELL = 18; // px per frame cell
+const TL_ROW  = 28; // row height
+
+function renderTimeline(){
+  const wrap  = document.getElementById('tlWrap');
+  const scroll= document.getElementById('tlScroll');
+  const w     = Math.max(scroll.clientWidth, totalFrames*TL_CELL+40);
+  tlCanvas.width  = w;
+  tlCanvas.height = 88;
+  wrap.style.width = w+'px';
+  const tc = tlCtx;
+  tc.clearRect(0,0,w,88);
+
+  // Frame ruler
+  tc.fillStyle='#1e1f24';
+  tc.fillRect(0,0,w,20);
+  tc.font='9px monospace';
+  for(let f=0;f<totalFrames;f++){
+    const x=f*TL_CELL;
+    tc.fillStyle=f===currentFrame?'var(--accent, #e8900a)':'#454648';
+    tc.fillRect(x,0,1,20);
+    if(f%2===0){
+      tc.fillStyle=f===currentFrame?'#e8900a':'#606268';
+      tc.fillText(f,x+2,13);
+    }
+  }
+  // Current frame highlight on ruler
+  const cx=currentFrame*TL_CELL;
+  tc.fillStyle='rgba(232,144,10,.15)';
+  tc.fillRect(cx,0,TL_CELL,20);
+
+  // Track row bg
+  tc.fillStyle='#12131a';
+  tc.fillRect(0,20,w,TL_ROW+4);
+
+  // Keyframe diamonds on the track
+  const keys=sortedKeys();
+  for(const f of keys){
+    const x=f*TL_CELL+TL_CELL/2;
+    const y=20+TL_ROW/2+2;
+    tc.save();
+    tc.fillStyle=f===currentFrame?'#fff':'#e8900a';
+    tc.strokeStyle=f===currentFrame?'#e8900a':'#7a4800';
+    tc.lineWidth=1;
+    tc.beginPath();
+    tc.moveTo(x,y-6); tc.lineTo(x+5,y); tc.lineTo(x,y+6); tc.lineTo(x-5,y); tc.closePath();
+    tc.fill(); tc.stroke();
+    tc.restore();
+  }
+
+  // Interpolation lines between keyframes
+  if(keys.length>=2){
+    tc.strokeStyle='rgba(232,144,10,0.25)';
+    tc.lineWidth=1;
+    tc.setLineDash([3,3]);
+    tc.beginPath();
+    for(let i=0;i<keys.length-1;i++){
+      const xa=keys[i]*TL_CELL+TL_CELL/2;
+      const xb=keys[i+1]*TL_CELL+TL_CELL/2;
+      const y=20+TL_ROW/2+2;
+      tc.moveTo(xa,y); tc.lineTo(xb,y);
+    }
+    tc.stroke();
+    tc.setLineDash([]);
+  }
+
+  // Playhead
+  tc.fillStyle='rgba(232,144,10,0.85)';
+  tc.fillRect(currentFrame*TL_CELL,0,2,88);
+  // Playhead triangle
+  tc.beginPath();
+  tc.moveTo(currentFrame*TL_CELL,0);
+  tc.lineTo(currentFrame*TL_CELL+8,0);
+  tc.lineTo(currentFrame*TL_CELL,10);
+  tc.closePath();
+  tc.fill();
+}
+
+// Timeline click → jump to frame
+document.getElementById('tlCanvas').addEventListener('click', e=>{
+  const r=tlCanvas.getBoundingClientRect();
+  const x=e.clientX-r.left;
+  const f=clamp(Math.floor(x/TL_CELL),0,totalFrames-1);
+  goToFrame(f);
+});
+document.getElementById('tlCanvas').addEventListener('mousemove', e=>{
+  const r=tlCanvas.getBoundingClientRect();
+  tlCanvas.style.cursor = 'pointer';
+});
+
+// ══════════════════════════════════════════════════════════════
+//  EXPORT  (ZIP with CRC32 – hand-rolled)
+// ══════════════════════════════════════════════════════════════
+let exportZIPBuffer = null;
+
+function triggerExport(){
+  if(!sprite){hint('No sprite loaded');return;}
+  if(!keyframes.size){hint('No keyframes set');return;}
+  document.getElementById('exportModal').classList.add('open');
+  document.getElementById('exp-close').disabled=true;
+  document.getElementById('exp-download').disabled=true;
+  document.getElementById('exp-progress').style.width='0%';
+  document.getElementById('exp-status').textContent='Rendering frames…';
+  exportZIPBuffer=null;
+  setTimeout(()=>runExport(),50);
+}
+
+async function runExport(){
+  const scale  = parseFloat(document.getElementById('sel-scale').value)||1;
+  const drawMesh=opts.exportMesh;
+  const W=Math.round(spriteW*scale), H=Math.round(spriteH*scale);
+  const easing = document.getElementById('sel-easing').value;
+
+  // Output canvas (scaled) + sprite-res ImageData buffer for pixel-perfect warp
+  const oc     = document.createElement('canvas'); oc.width=W; oc.height=H;
+  const oc_ctx = oc.getContext('2d'); oc_ctx.imageSmoothingEnabled=false;
+  // Sprite pixels read once for this export run (same data as viewport rasterizer)
+  const src = _getSrcPixels();
+
+  const files=[];
+  const savedFrame=currentFrame;
+  const savedVerts=verts.map(v=>({...v}));
+
+  // Snapshot current keyframes so export doesn't mutate state
+  for(let f=0;f<totalFrames;f++){
+    // interpolate positions
+    interpolateFrameDirect(f, easing);
+
+    // Pixel-perfect raster — identical algorithm to viewport renderWarpedSprite
+    const SW=spriteW, SH=spriteH;
+    const dst=new ImageData(SW,SH);
+    const d=dst.data;
+    for(const[ai,bi,ci] of tris){
+      const va=verts[ai],vb=verts[bi],vc=verts[ci];
+      const dx0=va.x,dy0=va.y, dx1=vb.x,dy1=vb.y, dx2=vc.x,dy2=vc.y;
+      const sx0=va.ox,sy0=va.oy, sx1=vb.ox,sy1=vb.oy, sx2=vc.ox,sy2=vc.oy;
+      const denom=(dy1-dy2)*(dx0-dx2)+(dx2-dx1)*(dy0-dy2);
+      if(Math.abs(denom)<1e-6) continue;
+      const inv=1/denom;
+      const minX=Math.max(0,Math.floor(Math.min(dx0,dx1,dx2)));
+      const maxX=Math.min(SW-1,Math.ceil(Math.max(dx0,dx1,dx2)));
+      const minY=Math.max(0,Math.floor(Math.min(dy0,dy1,dy2)));
+      const maxY=Math.min(SH-1,Math.ceil(Math.max(dy0,dy1,dy2)));
+      for(let py=minY;py<=maxY;py++){
+        for(let px=minX;px<=maxX;px++){
+          const pcx=px+0.5,pcy=py+0.5;
+          const w0=((dy1-dy2)*(pcx-dx2)+(dx2-dx1)*(pcy-dy2))*inv;
+          const w1=((dy2-dy0)*(pcx-dx2)+(dx0-dx2)*(pcy-dy2))*inv;
+          const w2=1-w0-w1;
+          if(w0<0||w1<0||w2<0) continue;
+          const sxi=Math.round(w0*sx0+w1*sx1+w2*sx2)|0;
+          const syi=Math.round(w0*sy0+w1*sy1+w2*sy2)|0;
+          if(sxi<0||sxi>=SW||syi<0||syi>=SH) continue;
+          const si=(syi*SW+sxi)*4, di=(py*SW+px)*4;
+          d[di]=src[si]; d[di+1]=src[si+1]; d[di+2]=src[si+2]; d[di+3]=src[si+3];
+        }
+      }
+    }
+    // Write sprite-res buffer, then scale to output size
+    const sprBuf=document.createElement('canvas'); sprBuf.width=SW; sprBuf.height=SH;
+    const sprCtx=sprBuf.getContext('2d'); sprCtx.putImageData(dst,0,0);
+    oc_ctx.clearRect(0,0,W,H);
+    oc_ctx.imageSmoothingEnabled=false;
+    oc_ctx.drawImage(sprBuf,0,0,W,H);
+
+    if(drawMesh){
+      oc_ctx.save();
+      oc_ctx.scale(scale,scale);
+      oc_ctx.strokeStyle='rgba(232,144,10,0.6)'; oc_ctx.lineWidth=0.5;
+      for(const[a,b,c] of tris){
+        oc_ctx.beginPath(); oc_ctx.moveTo(verts[a].x,verts[a].y); oc_ctx.lineTo(verts[b].x,verts[b].y); oc_ctx.lineTo(verts[c].x,verts[c].y); oc_ctx.closePath(); oc_ctx.stroke();
+      }
+      oc_ctx.restore();
+    }
+
+    // PNG bytes
+    const dataURL=oc.toDataURL('image/png');
+    const base64=dataURL.split(',')[1];
+    const bytes=base64Decode(base64);
+    const name=`frame_${String(f).padStart(4,'0')}.png`;
+    files.push({name, data:bytes});
+
+    // Update progress
+    const pct=Math.round((f+1)/totalFrames*100);
+    document.getElementById('exp-progress').style.width=pct+'%';
+    document.getElementById('exp-detail').textContent=`Frame ${f+1} / ${totalFrames}`;
+
+    // Yield to UI
+    if(f%4===3) await new Promise(r=>setTimeout(r,0));
+  }
+
+  // Restore state
+  for(let i=0;i<verts.length;i++){verts[i].x=savedVerts[i].x;verts[i].y=savedVerts[i].y;}
+  currentFrame=savedFrame;
+
+  // Build ZIP
+  document.getElementById('exp-status').textContent='Building ZIP…';
+  await new Promise(r=>setTimeout(r,10));
+  exportZIPBuffer=buildZip(files);
+
+  document.getElementById('exp-status').textContent=`Done — ${totalFrames} frames, ${(exportZIPBuffer.byteLength/1024).toFixed(1)} KB`;
+  document.getElementById('exp-close').disabled=false;
+  document.getElementById('exp-download').disabled=false;
+}
+
+// Interpolate without mutating currentFrame or re-rendering
+function interpolateFrameDirect(f, easing){
+  if(!keyframes.size) return;
+  const keys=sortedKeys();
+  let k0=null,k1=null;
+  for(const k of keys) if(k<=f) k0=k;
+  for(const k of [...keys].reverse()) if(k>=f) k1=k;
+  if(k0===null&&k1===null) return;
+  if(k0===null){const pos=keyframes.get(k1);for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}return;}
+  if(k1===null){const pos=keyframes.get(k0);for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}return;}
+  if(k0===k1){const pos=keyframes.get(k0);for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}return;}
+  const rawT=(f-k0)/(k1-k0), t=applyEasing(rawT,easing);
+  const p0=keyframes.get(k0),p1=keyframes.get(k1);
+  for(let i=0;i<verts.length;i++){verts[i].x=lerp(p0[i*2],p1[i*2],t);verts[i].y=lerp(p0[i*2+1],p1[i*2+1],t);}
+}
+
+function closeExportModal(){ document.getElementById('exportModal').classList.remove('open'); }
+function downloadZIP(){
+  if(!exportZIPBuffer) return;
+  const blob=new Blob([exportZIPBuffer],{type:'application/zip'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='animation.zip'; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ── base64 decode ─────────────────────────────────────────────
+function base64Decode(b64){
+  const bin=atob(b64);
+  const out=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i);
+  return out;
+}
+
+// ── CRC32 ─────────────────────────────────────────────────────
+const CRC_TABLE=(()=>{
+  const t=new Uint32Array(256);
+  for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++) c=c&1?(0xEDB88320^(c>>>1)):(c>>>1);t[i]=c;}
+  return t;
+})();
+function crc32(data,crc=0xFFFFFFFF){
+  for(let i=0;i<data.length;i++) crc=CRC_TABLE[(crc^data[i])&0xFF]^(crc>>>8);
+  return (crc^0xFFFFFFFF)>>>0;
+}
+
+// ── ZIP builder ───────────────────────────────────────────────
+function buildZip(files){
+  const enc=new TextEncoder();
+  const localHeaders=[];
+  const parts=[];
+  let offset=0;
+
+  for(const{name,data} of files){
+    const nameBytes=enc.encode(name);
+    const crc=crc32(data);
+    const lh=new Uint8Array(30+nameBytes.length);
+    const dv=new DataView(lh.buffer);
+    dv.setUint32(0,0x04034b50,true);   // local file header sig
+    dv.setUint16(4,20,true);           // version needed
+    dv.setUint16(6,0,true);            // flags
+    dv.setUint16(8,0,true);            // compression: store
+    dv.setUint16(10,0,true);           // mod time
+    dv.setUint16(12,0,true);           // mod date
+    dv.setUint32(14,crc,true);
+    dv.setUint32(18,data.length,true); // compressed size
+    dv.setUint32(22,data.length,true); // uncompressed size
+    dv.setUint16(26,nameBytes.length,true);
+    dv.setUint16(28,0,true);           // extra length
+    lh.set(nameBytes,30);
+    localHeaders.push({nameBytes,crc,size:data.length,offset});
+    parts.push(lh,data);
+    offset+=lh.length+data.length;
+  }
+
+  // Central directory
+  const cdParts=[];
+  for(let i=0;i<files.length;i++){
+    const{nameBytes,crc,size,offset:off}=localHeaders[i];
+    const cd=new Uint8Array(46+nameBytes.length);
+    const dv=new DataView(cd.buffer);
+    dv.setUint32(0,0x02014b50,true);   // central dir sig
+    dv.setUint16(4,20,true);           // version made by
+    dv.setUint16(6,20,true);           // version needed
+    dv.setUint16(8,0,true);            // flags
+    dv.setUint16(10,0,true);           // compression
+    dv.setUint16(12,0,true);           // mod time
+    dv.setUint16(14,0,true);           // mod date
+    dv.setUint32(16,crc,true);
+    dv.setUint32(20,size,true);
+    dv.setUint32(24,size,true);
+    dv.setUint16(28,nameBytes.length,true);
+    dv.setUint16(30,0,true);           // extra
+    dv.setUint16(32,0,true);           // comment
+    dv.setUint16(34,0,true);           // disk start
+    dv.setUint16(36,0,true);           // int attr
+    dv.setUint32(38,0,true);           // ext attr
+    dv.setUint32(42,off,true);         // local header offset
+    cd.set(nameBytes,46);
+    cdParts.push(cd);
+  }
+
+  const cdBytes=cdParts.reduce((a,b)=>a+b.length,0);
+  const eocd=new Uint8Array(22);
+  const edv=new DataView(eocd.buffer);
+  edv.setUint32(0,0x06054b50,true);
+  edv.setUint16(4,0,true);
+  edv.setUint16(6,0,true);
+  edv.setUint16(8,files.length,true);
+  edv.setUint16(10,files.length,true);
+  edv.setUint32(12,cdBytes,true);
+  edv.setUint32(16,offset,true);
+  edv.setUint16(20,0,true);
+
+  // Concat all
+  const all=[...parts,...cdParts,eocd];
+  const total=all.reduce((a,b)=>a+b.length,0);
+  const out=new Uint8Array(total);
+  let pos=0;
+  for(const chunk of all){out.set(chunk,pos);pos+=chunk.length;}
+  return out.buffer;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  UI helpers
+// ══════════════════════════════════════════════════════════════
+function updateUI(){
+  document.getElementById('s-verts').textContent=verts.length;
+  document.getElementById('s-tris').textContent=tris.length;
+  document.getElementById('s-keys').textContent=keyframes.size;
+  document.getElementById('s-frames').textContent=totalFrames;
+  const dvBtn=document.getElementById('btn-delete-vtx');
+  if(dvBtn) dvBtn.style.opacity=selIdx.size?'1':'0.35';
+  document.getElementById('sb-mode').textContent=mode.toUpperCase();
+  document.getElementById('sb-frame').textContent=`Frame ${currentFrame} / ${totalFrames-1}`;
+  document.getElementById('tl-frame-label').textContent=`Frame ${currentFrame}`;
+  const hints={select:'Click to select · Shift+click multi-select · Drag to box-select · Del to delete',add:'Click on sprite to add a vertex',deform:'Drag vertices to deform · drag on keyframe frame to animate'};
+  document.getElementById('sb-hint').textContent=hints[mode]||'';
+}
+function hint(t){ document.getElementById('sb-hint').textContent=t; }
+
+
+// ── Help ──────────────────────────────────────────────────────
+function openHelp(){ document.getElementById('helpModal').classList.add('open'); }
+function closeHelp(){ document.getElementById('helpModal').classList.remove('open'); }
+// Close on backdrop click
+document.getElementById('helpModal').addEventListener('click', e=>{
+  if(e.target===document.getElementById('helpModal')) closeHelp();
+});
+
+// ── Init ──────────────────────────────────────────────────────
+updateUI();
+renderTimeline();
+render();
+</script>
+</body>
+</html>
