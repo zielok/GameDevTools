@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anim Forge</title>
+<style>
+  :root {
+    --bg: #0e0e12;
+    --surface: #16161d;
+    --panel: #1c1c26;
+    --border: #2a2a3a;
+    --track1: #12201a;
+    --track2: #141426;
+    --track3: #221414;
+    --track4: #222214;
+    --seg1: #2d6e2d;
+    --seg2: #2d2d8a;
+    --seg3: #8a2d2d;
+    --seg4: #7a7a1a;
+    --accent: #6af;
+    --accent2: #af6;
+    --text: #dde;
+    --text-dim: #778;
+    --playhead: #f80;
+    --label-w: 120px;
+    --track-h: 56px;
+    --ruler-h: 26px;
+    --font: 'Segoe UI', system-ui, sans-serif;
+    --mono: 'Consolas', 'Fira Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 5px 12px; background: var(--surface); border-bottom: 1px solid var(--border);
+    flex-shrink: 0; height: 36px;
+  }
+  #topbar h1 { font-size: 14px; font-weight: 700; letter-spacing: .06em; color: var(--accent); margin-right: 4px; }
+  .tb-sep { width: 1px; height: 20px; background: var(--border); }
+  .tb-group { display: flex; align-items: center; gap: 6px; }
+  label.tb-label { color: var(--text-dim); font-size: 11px; }
+  input[type=number].tb-num {
+    width: 50px; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 2px 5px; border-radius: 4px; font-family: var(--mono); font-size: 12px;
+  }
+  button.tb-btn {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 3px 9px; border-radius: 4px; cursor: pointer; font-size: 12px;
+  }
+  button.tb-btn:hover { background: var(--border); }
+  button.tb-btn.accent { background: #1a3a1a; border-color: var(--accent2); color: var(--accent2); }
+  button.tb-btn.accent:hover { background: #254025; }
+  #status { margin-left: auto; font-size: 11px; color: var(--text-dim); font-family: var(--mono); max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── MIDDLE: TIMELINE AREA ── */
+  #timeline-area {
+    display: flex; flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    height: calc(var(--ruler-h) + var(--track-h) * 4 + 2px);
+    overflow: hidden;
+  }
+
+  /* Left column: ruler corner + track labels */
+  #tl-left {
+    width: var(--label-w); flex-shrink: 0;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  #tl-corner {
+    height: var(--ruler-h); flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em;
+  }
+  .track-label {
+    height: var(--track-h); flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 8px; gap: 6px;
+    font-size: 11px; font-weight: 600;
+  }
+  .track-label span { flex: 1; }
+  .track-add-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    width: 20px; height: 20px; border-radius: 3px; cursor: pointer; font-size: 15px; line-height: 1;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .track-add-btn:hover { color: var(--accent2); border-color: var(--accent2); }
+
+  /* Right: scrollable timeline */
+  #tl-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; display: flex; flex-direction: column; }
+  #tl-inner { position: relative; flex-shrink: 0; display: flex; flex-direction: column; min-height: 100%; }
+  #ruler { height: var(--ruler-h); flex-shrink: 0; position: sticky; left: 0; z-index: 5; }
+
+  .track-row {
+    height: var(--track-h); flex-shrink: 0;
+    border-bottom: 1px solid var(--border); position: relative; cursor: crosshair;
+  }
+  .track-row:nth-child(2) { background: var(--track1); }
+  .track-row:nth-child(3) { background: var(--track2); }
+  .track-row:nth-child(4) { background: var(--track3); }
+  .track-row:nth-child(5) { background: var(--track4); }
+
+  .seg-block {
+    position: absolute; top: 4px; height: calc(var(--track-h) - 8px);
+    border-radius: 4px; cursor: pointer; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.15);
+    display: flex; flex-direction: column; justify-content: center; padding: 2px 6px;
+    transition: filter .1s; user-select: none;
+  }
+  .seg-block:hover { filter: brightness(1.25); }
+  .seg-block.selected { border-color: #fff; border-width: 2px; filter: brightness(1.3); }
+  .seg-block .seg-name { font-size: 10px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg-block .seg-info { font-size: 9px; color: rgba(255,255,255,.6); font-family: var(--mono); }
+  .track-row:nth-child(2) .seg-block { background: var(--seg1); }
+  .track-row:nth-child(3) .seg-block { background: var(--seg2); }
+  .track-row:nth-child(4) .seg-block { background: var(--seg3); }
+  .track-row:nth-child(5) .seg-block { background: var(--seg4); }
+
+  #playhead {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: var(--playhead); z-index: 20; pointer-events: none;
+  }
+  #playhead::before {
+    content: ''; position: absolute; top: -1px; left: -5px;
+    border: 6px solid transparent; border-top-color: var(--playhead);
+  }
+
+  /* ── BOTTOM: PREVIEW + TRANSPORT + PROPS ── */
+  #bottom-area { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+  /* Preview */
+  #preview-pane {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--surface); border-right: 1px solid var(--border);
+  }
+  #transport {
+    display: flex; align-items: center; gap: 8px; padding: 5px 10px;
+    background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .t-btn {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    width: 28px; height: 24px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .t-btn:hover { background: var(--border); }
+  .t-btn.active { background: #1a3060; border-color: var(--accent); }
+  #frame-counter { font-family: var(--mono); font-size: 13px; color: var(--accent); min-width: 72px; }
+  #time-counter { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  #canvas-wrap { flex: 1; overflow: auto; background: #07070e; padding: 8px; display: flex; align-items: safe center; justify-content: safe center; }
+  #preview-canvas { image-rendering: pixelated; display: block; }
+  #zoom-bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; font-size: 11px; color: var(--text-dim); }
+  #zoom-bar button { background: var(--panel); border: 1px solid var(--border); color: var(--text); width: 22px; height: 22px; border-radius: 3px; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  #zoom-bar button:hover { background: var(--border); }
+  #zoom-bar input[type=range] { width: 90px; accent-color: var(--accent); cursor: pointer; }
+  #zoom-label { font-family: var(--mono); color: var(--accent); min-width: 36px; }
+  #preview-info { padding: 4px 10px; font-size: 11px; font-family: var(--mono); color: var(--text-dim); border-top: 1px solid var(--border); flex-shrink: 0; }
+
+  /* Prop panel */
+  #prop-panel {
+    width: 256px; flex-shrink: 0;
+    background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #prop-header { padding: 6px 10px; font-size: 11px; color: var(--text-dim); border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: .08em; }
+  #prop-body { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+  .prop-row { display: flex; flex-direction: column; gap: 3px; }
+  .prop-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; }
+  .prop-input {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 4px 7px; border-radius: 4px; font-family: var(--mono); font-size: 12px; width: 100%;
+  }
+  select.prop-input { cursor: pointer; }
+  .prop-input:focus { outline: 1px solid var(--accent); }
+  #frames-list { overflow-y: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 4px; display: flex; flex-wrap: wrap; gap: 2px; max-height: 160px; }
+  .frame-thumb { width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 2px; cursor: pointer; position: relative; background: #111; overflow: hidden; }
+  .frame-thumb canvas { width: 100%; height: 100%; image-rendering: pixelated; }
+  .frame-thumb.selected-frame { border-color: #f66; }
+  .frame-thumb .frame-num { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,.7); font-size: 8px; text-align: center; color: #aaa; font-family: var(--mono); }
+  .frames-actions { display: flex; gap: 4px; margin-top: 4px; }
+  .frames-actions button { flex: 1; background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 4px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+  .frames-actions button:hover { background: var(--border); }
+  .frames-actions button.danger { border-color: #833; color: #f88; }
+  .frames-actions button.danger:hover { background: #2a1010; }
+  #prop-empty { color: var(--text-dim); font-size: 12px; text-align: center; margin-top: 30px; }
+
+  /* Export Modal */
+  #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; display: none; align-items: center; justify-content: center; }
+  #modal-overlay.open { display: flex; }
+  #modal { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; min-width: 320px; display: flex; flex-direction: column; gap: 12px; }
+  #modal h2 { font-size: 14px; color: var(--accent); }
+  #modal-progress { background: var(--bg); border-radius: 4px; height: 8px; overflow: hidden; }
+  #modal-bar { height: 100%; background: var(--accent2); width: 0%; transition: width .1s; }
+  #modal-status { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+  #modal-close { align-self: flex-end; background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 4px 14px; border-radius: 4px; cursor: pointer; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <h1>ANIM FORGE</h1>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <label class="tb-label">FPS</label>
+    <input type="number" class="tb-num" id="fps-input" value="30" min="1" max="120">
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <label class="tb-label">Zoom</label>
+    <input type="number" class="tb-num" id="zoom-input" value="4" min="1" max="40">
+    <label class="tb-label">px/frame</label>
+  </div>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="clear-btn">Clear All</button>
+  <span id="status">Ready</span>
+</div>
+
+<!-- TIMELINE AREA -->
+<div id="timeline-area">
+  <!-- Left labels -->
+  <div id="tl-left">
+    <div id="tl-corner">Timeline</div>
+    <div class="track-label" style="color:#7f7"><span>Track 1</span><button class="track-add-btn" data-track="0" title="Add segment to Track 1">+</button></div>
+    <div class="track-label" style="color:#77f"><span>Track 2</span><button class="track-add-btn" data-track="1" title="Add segment to Track 2">+</button></div>
+    <div class="track-label" style="color:#f77"><span>Track 3</span><button class="track-add-btn" data-track="2" title="Add segment to Track 3">+</button></div>
+    <div class="track-label" style="color:#ff7"><span>Track 4</span><button class="track-add-btn" data-track="3" title="Add segment to Track 4">+</button></div>
+  </div>
+  <!-- Scrollable timeline -->
+  <div id="tl-scroll">
+    <div id="tl-inner">
+      <canvas id="ruler"></canvas>
+      <div class="track-row" data-track="0"></div>
+      <div class="track-row" data-track="1"></div>
+      <div class="track-row" data-track="2"></div>
+      <div class="track-row" data-track="3"></div>
+      <div id="playhead"></div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM: PREVIEW + PROPS -->
+<div id="bottom-area">
+  <div id="preview-pane">
+    <!-- Transport bar -->
+    <div id="transport">
+      <button class="t-btn" id="btn-rewind" title="Rewind">⏮</button>
+      <button class="t-btn" id="btn-play" title="Play/Pause">▶</button>
+      <button class="t-btn" id="btn-stop" title="Stop">⏹</button>
+      <span id="frame-counter">0 / 0</span>
+      <span id="time-counter">0.00s</span>
+      <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-dim);margin-left:6px;">
+        <input type="checkbox" id="loop-toggle" checked> Loop
+      </label>
+      <button class="tb-btn accent" id="export-btn" style="margin-left:auto">⬇ Export ZIP</button>
+    </div>
+    <!-- Zoom bar -->
+    <div id="zoom-bar">
+      <button id="pz-out">−</button>
+      <input type="range" id="pz-slider" min="10" max="800" value="100" step="1">
+      <button id="pz-in">+</button>
+      <span id="zoom-label">100%</span>
+      <button id="pz-fit" style="width:auto;padding:0 6px;font-size:11px;">Fit</button>
+    </div>
+    <!-- Canvas -->
+    <div id="canvas-wrap">
+      <canvas id="preview-canvas" width="320" height="180"></canvas>
+    </div>
+    <div id="preview-info">No animation loaded</div>
+  </div>
+
+  <!-- Prop Panel -->
+  <div id="prop-panel">
+    <div id="prop-header">Segment Properties</div>
+    <div id="prop-body">
+      <div id="prop-empty">Click a segment<br>to edit its properties</div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div id="modal-overlay">
+  <div id="modal">
+    <h2>Exporting…</h2>
+    <div id="modal-progress"><div id="modal-bar"></div></div>
+    <div id="modal-status">Preparing…</div>
+    <button id="modal-close" style="display:none">Close</button>
+  </div>
+</div>
+
+<!-- HIDDEN FILE INPUT -->
+<input type="file" id="file-input" accept=".zip" style="display:none">
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+const state = {
+  fps: 30,
+  zoom: 4,          // px per frame on timeline
+  totalFrames: 0,
+  currentFrame: 0,
+  playing: false,
+  loop: true,
+  canvasW: 320,
+  canvasH: 180,
+  // tracks[0..3] = array of segments
+  tracks: [[], [], [], []],
+  selectedSeg: null,   // {trackIdx, segIdx}
+  selectedFrames: new Set(),
+  pendingTrack: null,  // which track awaits file pick
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  DOM REFS
+// ═══════════════════════════════════════════════════════════════
+const previewCanvas = document.getElementById('preview-canvas');
+const ctx = previewCanvas.getContext('2d');
+// Offscreen canvas holds the composited frame at native resolution
+const offCtx = document.createElement('canvas');
+offCtx.width = 320; offCtx.height = 180;
+const offCtxCtx = offCtx.getContext('2d');
+const ruler = document.getElementById('ruler');
+const rCtx = ruler.getContext('2d');
+const timelineInner = document.getElementById('tl-inner');
+const timelineScroll = document.getElementById('tl-scroll');
+const trackRows = Array.from(document.querySelectorAll('.track-row'));
+const playhead = document.getElementById('playhead');
+const frameCounter = document.getElementById('frame-counter');
+const timeCounter = document.getElementById('time-counter');
+const propBody = document.getElementById('prop-body');
+const statusEl = document.getElementById('status');
+const previewInfo = document.getElementById('preview-info');
+const fileInput = document.getElementById('file-input');
+let previewZoom = 1.0;
+
+function applyPreviewZoom(z) {
+  previewZoom = Math.max(0.1, Math.min(8, z));
+  const pct = Math.round(previewZoom * 100);
+  // Resize display canvas pixel dimensions = native * zoom
+  const dispW = Math.max(1, Math.round(state.canvasW * previewZoom));
+  const dispH = Math.max(1, Math.round(state.canvasH * previewZoom));
+  previewCanvas.width  = dispW;
+  previewCanvas.height = dispH;
+  previewCanvas.style.width  = '';
+  previewCanvas.style.height = '';
+  const slider = document.getElementById('pz-slider');
+  if (slider) slider.value = pct;
+  const label = document.getElementById('zoom-label');
+  if (label) label.textContent = pct + '%';
+  renderFrame(state.currentFrame);
+}
+
+function fitPreview() {
+  const wrap = document.getElementById('canvas-wrap');
+  if (!wrap || !state.canvasW || !state.canvasH) return;
+  const aw = wrap.clientWidth  - 16;
+  const ah = wrap.clientHeight - 16;
+  if (aw <= 0 || ah <= 0) return;
+  const z = Math.min(aw / state.canvasW, ah / state.canvasH, 8);
+  applyPreviewZoom(z);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ZIP READER (pure JS, no deps)
+// ═══════════════════════════════════════════════════════════════
+function readUint16LE(buf, off) { return buf[off] | (buf[off+1] << 8); }
+function readUint32LE(buf, off) { return (buf[off] | (buf[off+1]<<8) | (buf[off+2]<<16) | (buf[off+3]<<24)) >>> 0; }
+
+async function parseZip(arrayBuffer) {
+  const data = new Uint8Array(arrayBuffer);
+  const files = {};
+
+  // ── Step 1: find End of Central Directory (EOCD) ──
+  // Search from the end for PK\x05\x06
+  let eocdOff = -1;
+  for (let i = data.length - 22; i >= 0; i--) {
+    if (data[i]===0x50 && data[i+1]===0x4B && data[i+2]===0x05 && data[i+3]===0x06) {
+      eocdOff = i; break;
+    }
+  }
+  if (eocdOff < 0) { console.error('[ZIP] No EOCD found'); return files; }
+
+  const cdCount  = readUint16LE(data, eocdOff + 8);
+  const cdSize   = readUint32LE(data, eocdOff + 12);
+  const cdOffset = readUint32LE(data, eocdOff + 16);
+  console.log('[ZIP] EOCD found. CD entries:', cdCount, 'CD offset:', cdOffset);
+
+  // ── Step 2: walk Central Directory to get correct sizes + local offsets ──
+  const entries = [];
+  let p = cdOffset;
+  for (let e = 0; e < cdCount; e++) {
+    if (data[p]!==0x50||data[p+1]!==0x4B||data[p+2]!==0x01||data[p+3]!==0x02) break;
+    const compression = readUint16LE(data, p + 10);
+    const compSize    = readUint32LE(data, p + 20);
+    const uncompSize  = readUint32LE(data, p + 24);
+    const fnLen       = readUint16LE(data, p + 28);
+    const extraLen    = readUint16LE(data, p + 30);
+    const commentLen  = readUint16LE(data, p + 32);
+    const localOff    = readUint32LE(data, p + 42);
+    const fname       = new TextDecoder().decode(data.subarray(p + 46, p + 46 + fnLen));
+    entries.push({ fname, compression, compSize, uncompSize, localOff });
+    p += 46 + fnLen + extraLen + commentLen;
+  }
+  console.log('[ZIP] Parsed', entries.length, 'CD entries');
+
+  // ── Step 3: for each entry, find actual data via local header ──
+  for (const entry of entries) {
+    const { fname, compression, compSize, uncompSize, localOff } = entry;
+
+    // Skip directories and macOS metadata
+    if (fname.endsWith('/')) continue;
+    const parts = fname.replace(/\\/g,'/').split('/');
+    if (parts.some(p2 => p2.startsWith('__MACOSX') || p2.startsWith('.'))) continue;
+
+    // Local header: PK\x03\x04, skip to data
+    const lh = localOff;
+    if (data[lh]!==0x50||data[lh+1]!==0x4B||data[lh+2]!==0x03||data[lh+3]!==0x04) {
+      console.warn('[ZIP] Bad local header for', fname);
+      continue;
+    }
+    const lfnLen   = readUint16LE(data, lh + 26);
+    const lextraLen= readUint16LE(data, lh + 28);
+    const dataStart = lh + 30 + lfnLen + lextraLen;
+    const compData  = data.subarray(dataStart, dataStart + compSize);
+
+    console.log('[ZIP]', fname, 'compression=' + compression, 'compSize=' + compSize, 'dataStart=' + dataStart);
+
+    if (compression === 0) {
+      files[fname] = compData.slice();
+    } else if (compression === 8) {
+      try {
+        const ds = new DecompressionStream('deflate-raw');
+        const writer = ds.writable.getWriter();
+        writer.write(compData.slice()); writer.close();
+        const out = [];
+        const reader = ds.readable.getReader();
+        while (true) { const {done,value} = await reader.read(); if (done) break; out.push(value); }
+        const merged = new Uint8Array(uncompSize);
+        let off = 0;
+        for (const c of out) { merged.set(c, off); off += c.byteLength; }
+        files[fname] = merged;
+        console.log('[ZIP]   OK', merged.length, 'bytes');
+      } catch(e) {
+        console.error('[ZIP]   deflate FAILED for', fname, ':', e.message);
+      }
+    } else {
+      console.warn('[ZIP] Unsupported compression', compression, 'for', fname);
+    }
+  }
+
+  console.log('[ZIP] Done. Loaded', Object.keys(files).length, 'files');
+  return files;
+}
+
+async function loadPNG(uint8) {
+  const blob = new Blob([uint8], {type:'image/png'});
+  const url = URL.createObjectURL(blob);
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); res(img); };
+    img.onerror = rej;
+    img.src = url;
+  });
+}
+
+// Sort filenames numerically
+function sortedPNGs(names) {
+  return names
+    .filter(n => {
+      if (!/\.png$/i.test(n)) return false;
+      // Odrzuć macOS metadata i ukryte pliki (zaczynające się od . po / lub na początku)
+      const parts = n.replace(/\\/g, '/').split('/');
+      return !parts.some(p => p.startsWith('__MACOSX') || p.startsWith('.'));
+    })
+    .sort((a,b) => {
+      // Sortuj po ostatnim numerze w nazwie pliku (nie w ścieżce)
+      const baseName = s => s.replace(/\\/g,'/').split('/').pop();
+      const num = s => { const m=baseName(s).match(/(\d+)/g); return m ? parseInt(m[m.length-1]) : 0; };
+      const na = num(a), nb = num(b);
+      if (na !== nb) return na - nb;
+      return a.localeCompare(b);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SEGMENT MODEL
+// ═══════════════════════════════════════════════════════════════
+let segIdCounter = 0;
+function createSegment(name, frames) {
+  return {
+    id: segIdCounter++,
+    name,
+    frames,        // array of {img, thumb} – thumb is small canvas
+    startFrame: 0, // offset on timeline
+    blend: 'source-over',
+    opacity: 1.0,
+  };
+}
+
+function makeThumbnail(img) {
+  const c = document.createElement('canvas');
+  c.width = 36; c.height = 36;
+  const cx = c.getContext('2d');
+  const scale = Math.min(36/img.width, 36/img.height);
+  const w = img.width*scale, h = img.height*scale;
+  cx.drawImage(img, (36-w)/2, (36-h)/2, w, h);
+  return c;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOAD ZIP → SEGMENT
+// ═══════════════════════════════════════════════════════════════
+async function loadZipToTrack(file, trackIdx) {
+  setStatus(`Loading ${file.name}…`);
+  try {
+    const ab = await file.arrayBuffer();
+    const zipFiles = await parseZip(ab);
+    const allNames = Object.keys(zipFiles);
+    const pngNames = sortedPNGs(allNames);
+    if (!pngNames.length) {
+      const preview = allNames.slice(0,5).join(', ');
+      setStatus(`No PNG files found in ZIP. Contents: ${preview || '(empty)'}`);
+      return;
+    }
+
+    const frames = [];
+    for (let i=0; i<pngNames.length; i++) {
+      const img = await loadPNG(zipFiles[pngNames[i]]);
+      // Set canvas size from first frame
+      if (state.tracks.every(t=>t.length===0)) {
+        // Set canvas size from first frame of first segment ever loaded
+        state.canvasW = img.width;
+        state.canvasH = img.height;
+        previewCanvas.width = img.width;
+        previewCanvas.height = img.height;
+        offCtx.width = img.width;
+        offCtx.height = img.height;
+        setTimeout(fitPreview, 80);
+      }
+      frames.push({ img, thumb: makeThumbnail(img) });
+      if (i % 10 === 0) setStatus(`Loading frame ${i+1}/${pngNames.length}…`);
+    }
+
+    const baseName = file.name.replace(/\.zip$/i,'');
+    const seg = createSegment(baseName, frames);
+
+    // Place after last segment on track
+    const track = state.tracks[trackIdx];
+    if (track.length > 0) {
+      const last = track[track.length-1];
+      seg.startFrame = last.startFrame + last.frames.length;
+    }
+    track.push(seg);
+
+    recalcTotal();
+    renderTimeline();
+    selectSegment(trackIdx, track.length-1);
+    renderFrame(state.currentFrame);
+    setStatus(`Loaded: ${baseName} (${frames.length} frames) → Track ${trackIdx+1}`);
+  } catch(e) {
+    console.error(e);
+    setStatus('Error loading ZIP: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TOTAL FRAMES
+// ═══════════════════════════════════════════════════════════════
+function recalcTotal() {
+  let max = 0;
+  for (const track of state.tracks) {
+    for (const seg of track) {
+      max = Math.max(max, seg.startFrame + seg.frames.length);
+    }
+  }
+  state.totalFrames = Math.max(max, 1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER FRAME
+// ═══════════════════════════════════════════════════════════════
+function renderFrame(f) {
+  // 1. Composite to offscreen at native resolution
+  offCtx.width = state.canvasW;
+  offCtx.height = state.canvasH;
+  offCtxCtx.clearRect(0, 0, state.canvasW, state.canvasH);
+  for (let ti = state.tracks.length-1; ti >= 0; ti--) {
+    for (const seg of state.tracks[ti]) {
+      const localF = f - seg.startFrame;
+      if (localF < 0 || localF >= seg.frames.length) continue;
+      offCtxCtx.globalCompositeOperation = seg.blend;
+      offCtxCtx.globalAlpha = seg.opacity;
+      offCtxCtx.drawImage(seg.frames[localF].img, 0, 0);
+    }
+  }
+  offCtxCtx.globalCompositeOperation = 'source-over';
+  offCtxCtx.globalAlpha = 1;
+  // 2. Copy to display canvas scaled by previewZoom (nearest-neighbour, no CSS blur)
+  ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(offCtx, 0, 0, state.canvasW, state.canvasH,
+                        0, 0, previewCanvas.width, previewCanvas.height);
+  frameCounter.textContent = `${f} / ${state.totalFrames - 1}`;
+  timeCounter.textContent = (f / state.fps).toFixed(2) + 's';
+  previewInfo.textContent = `${state.canvasW} × ${state.canvasH}  •  frame ${f}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PLAYBACK
+// ═══════════════════════════════════════════════════════════════
+let lastTime = null;
+let frameAccum = 0;
+let animId = null;
+
+function animLoop(ts) {
+  if (!state.playing) return;
+  if (lastTime !== null) {
+    frameAccum += (ts - lastTime) / 1000 * state.fps;
+    while (frameAccum >= 1) {
+      frameAccum -= 1;
+      state.currentFrame++;
+      if (state.currentFrame >= state.totalFrames) {
+        if (state.loop) state.currentFrame = 0;
+        else { state.currentFrame = state.totalFrames-1; stopPlay(); return; }
+      }
+    }
+    renderFrame(state.currentFrame);
+    updatePlayhead();
+  }
+  lastTime = ts;
+  animId = requestAnimationFrame(animLoop);
+}
+
+function startPlay() {
+  if (state.playing) return;
+  if (state.totalFrames < 1) return;
+  state.playing = true;
+  lastTime = null; frameAccum = 0;
+  document.getElementById('btn-play').classList.add('active');
+  document.getElementById('btn-play').textContent = '⏸';
+  animId = requestAnimationFrame(animLoop);
+}
+
+function stopPlay() {
+  state.playing = false;
+  if (animId) { cancelAnimationFrame(animId); animId = null; }
+  document.getElementById('btn-play').classList.remove('active');
+  document.getElementById('btn-play').textContent = '▶';
+}
+
+function togglePlay() {
+  if (state.playing) stopPlay(); else startPlay();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TIMELINE RENDER
+// ═══════════════════════════════════════════════════════════════
+const TRACK_H = 52;
+const RULER_H = 28;
+
+function renderTimeline() {
+  const z = state.zoom;
+  const totalW = Math.max(state.totalFrames * z + 200, document.getElementById('tl-scroll').clientWidth || 800);
+  timelineInner.style.width = totalW + 'px';
+
+  // Ruler
+  ruler.width = totalW;
+  ruler.height = RULER_H;
+  rCtx.clearRect(0, 0, totalW, RULER_H);
+  rCtx.fillStyle = '#1c1c26';
+  rCtx.fillRect(0, 0, totalW, RULER_H);
+
+  const step = bestStep(z);
+  rCtx.fillStyle = '#556';
+  rCtx.font = '10px Consolas, monospace';
+  rCtx.textBaseline = 'middle';
+  for (let f=0; f<state.totalFrames+step; f+=step) {
+    const x = f * z;
+    rCtx.strokeStyle = '#334';
+    rCtx.lineWidth = 1;
+    rCtx.beginPath(); rCtx.moveTo(x, RULER_H-8); rCtx.lineTo(x, RULER_H); rCtx.stroke();
+    const label = f % (step*5)===0 ? (f/state.fps).toFixed(1)+'s' : '';
+    if (label) { rCtx.fillStyle = '#778'; rCtx.fillText(label, x+2, RULER_H/2); }
+  }
+
+  // Segments
+  trackRows.forEach((row, ti) => {
+    // Remove old blocks
+    row.querySelectorAll('.seg-block').forEach(b=>b.remove());
+    for (let si=0; si<state.tracks[ti].length; si++) {
+      const seg = state.tracks[ti][si];
+      const block = document.createElement('div');
+      block.className = 'seg-block';
+      if (state.selectedSeg && state.selectedSeg.trackIdx===ti && state.selectedSeg.segIdx===si) {
+        block.classList.add('selected');
+      }
+      block.style.left = (seg.startFrame * z) + 'px';
+      block.style.width = (seg.frames.length * z) + 'px';
+      block.innerHTML = `<div class="seg-name">${seg.name}</div><div class="seg-info">${seg.frames.length}f · ${seg.blend}</div>`;
+      block.addEventListener('click', e => { e.stopPropagation(); selectSegment(ti, si); });
+      row.appendChild(block);
+    }
+  });
+
+  updatePlayhead();
+}
+
+function bestStep(zoom) {
+  if (zoom >= 8) return 1;
+  if (zoom >= 4) return 5;
+  if (zoom >= 2) return 10;
+  return 30;
+}
+
+function updatePlayhead() {
+  const x = state.currentFrame * state.zoom;
+  playhead.style.left = (x + 110) + 'px'; // offset for track labels... actually playhead is inside timeline-inner so no offset needed
+  // Actually playhead is inside timeline-inner, position relative to that
+  playhead.style.left = x + 'px';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TIMELINE CLICK → SCRUB
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('tl-scroll').addEventListener('click', e => {
+  if (e.target.closest('.seg-block')) return;
+  const rect = timelineScroll.getBoundingClientRect();
+  const x = e.clientX - rect.left + timelineScroll.scrollLeft;
+  const f = Math.floor(x / state.zoom);
+  state.currentFrame = Math.max(0, Math.min(f, state.totalFrames-1));
+  renderFrame(state.currentFrame);
+  updatePlayhead();
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  SELECT SEGMENT → PROP PANEL
+// ═══════════════════════════════════════════════════════════════
+function selectSegment(trackIdx, segIdx) {
+  state.selectedSeg = {trackIdx, segIdx};
+  state.selectedFrames = new Set();
+  renderTimeline();
+  buildPropPanel();
+}
+
+const BLEND_MODES = [
+  ['source-over', 'Normal'],
+  ['lighter', 'Add'],
+  ['multiply', 'Multiply'],
+  ['screen', 'Screen'],
+  ['overlay', 'Overlay'],
+  ['darken', 'Darken'],
+  ['lighten', 'Lighten'],
+  ['color-dodge', 'Color Dodge'],
+  ['color-burn', 'Color Burn'],
+  ['difference', 'Difference'],
+  ['exclusion', 'Exclusion'],
+];
+
+function buildPropPanel() {
+  const {trackIdx, segIdx} = state.selectedSeg;
+  const seg = state.tracks[trackIdx][segIdx];
+
+  propBody.innerHTML = `
+    <div class="prop-row">
+      <div class="prop-label">Name</div>
+      <input class="prop-input" id="p-name" value="${seg.name}">
+    </div>
+    <div class="prop-row">
+      <div class="prop-label">Start Frame</div>
+      <input class="prop-input" type="number" id="p-start" value="${seg.startFrame}" min="0">
+    </div>
+    <div class="prop-row">
+      <div class="prop-label">Blend Mode</div>
+      <select class="prop-input" id="p-blend">
+        ${BLEND_MODES.map(([v,l])=>`<option value="${v}"${seg.blend===v?' selected':''}>${l}</option>`).join('')}
+      </select>
+    </div>
+    <div class="prop-row">
+      <div class="prop-label">Opacity (0–1)</div>
+      <input class="prop-input" type="number" id="p-opacity" value="${seg.opacity}" min="0" max="1" step="0.05">
+    </div>
+    <div class="prop-row">
+      <div class="prop-label">Frames: ${seg.frames.length} total</div>
+      <div id="frames-list-wrap">
+        <div id="frames-list"></div>
+        <div class="frames-actions">
+          <button id="sel-all-btn">Select all</button>
+          <button id="sel-none-btn">Deselect</button>
+          <button id="del-frames-btn" class="danger">Delete selected</button>
+        </div>
+        <div class="frames-actions" style="margin-top:4px">
+          <button id="del-last-btn" class="danger">Del last N</button>
+          <input class="prop-input" type="number" id="del-n" value="10" min="1" style="width:60px">
+        </div>
+      </div>
+    </div>
+    <div class="frames-actions" style="margin-top:4px">
+      <button id="del-seg-btn" class="danger" style="flex:unset;width:100%">🗑 Delete Segment</button>
+    </div>
+  `;
+
+  // Populate frames list
+  buildFramesList();
+
+  // Events
+  document.getElementById('p-name').addEventListener('input', e => { seg.name = e.target.value; renderTimeline(); });
+  document.getElementById('p-start').addEventListener('change', e => {
+    seg.startFrame = Math.max(0, parseInt(e.target.value)||0);
+    recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
+  });
+  document.getElementById('p-blend').addEventListener('change', e => {
+    seg.blend = e.target.value; renderTimeline(); renderFrame(state.currentFrame);
+  });
+  document.getElementById('p-opacity').addEventListener('change', e => {
+    seg.opacity = Math.max(0, Math.min(1, parseFloat(e.target.value)||1));
+    renderFrame(state.currentFrame);
+  });
+  document.getElementById('sel-all-btn').addEventListener('click', () => {
+    state.selectedFrames = new Set(seg.frames.map((_,i)=>i));
+    buildFramesList();
+  });
+  document.getElementById('sel-none-btn').addEventListener('click', () => {
+    state.selectedFrames = new Set();
+    buildFramesList();
+  });
+  document.getElementById('del-frames-btn').addEventListener('click', () => {
+    if (!state.selectedFrames.size) return;
+    seg.frames = seg.frames.filter((_,i) => !state.selectedFrames.has(i));
+    state.selectedFrames = new Set();
+    if (!seg.frames.length) { deleteSelectedSegment(); return; }
+    recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
+    buildPropPanel();
+  });
+  document.getElementById('del-last-btn').addEventListener('click', () => {
+    const n = parseInt(document.getElementById('del-n').value)||10;
+    seg.frames = seg.frames.slice(0, Math.max(1, seg.frames.length - n));
+    state.selectedFrames = new Set();
+    recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
+    buildPropPanel();
+  });
+  document.getElementById('del-seg-btn').addEventListener('click', deleteSelectedSegment);
+}
+
+function buildFramesList() {
+  const {trackIdx, segIdx} = state.selectedSeg;
+  const seg = state.tracks[trackIdx][segIdx];
+  const list = document.getElementById('frames-list');
+  if (!list) return;
+  list.innerHTML = '';
+  seg.frames.forEach((fr, i) => {
+    const div = document.createElement('div');
+    div.className = 'frame-thumb' + (state.selectedFrames.has(i) ? ' selected-frame' : '');
+    div.appendChild(fr.thumb.cloneNode(true)); // reuse thumb canvas
+    const num = document.createElement('div');
+    num.className = 'frame-num';
+    num.textContent = i;
+    div.appendChild(num);
+    div.addEventListener('click', () => {
+      if (state.selectedFrames.has(i)) state.selectedFrames.delete(i);
+      else state.selectedFrames.add(i);
+      div.classList.toggle('selected-frame');
+    });
+    list.appendChild(div);
+  });
+}
+
+function deleteSelectedSegment() {
+  const {trackIdx, segIdx} = state.selectedSeg;
+  state.tracks[trackIdx].splice(segIdx, 1);
+  state.selectedSeg = null;
+  state.selectedFrames = new Set();
+  propBody.innerHTML = '<div id="prop-empty">Click a segment<br>to edit its properties</div>';
+  recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════════════════════════
+// PREVIEW ZOOM CONTROLS
+document.getElementById('pz-in').addEventListener('click', () => applyPreviewZoom(previewZoom * 1.5));
+document.getElementById('pz-out').addEventListener('click', () => applyPreviewZoom(previewZoom / 1.5));
+document.getElementById('pz-fit').addEventListener('click', fitPreview);
+document.getElementById('pz-slider').addEventListener('input', e => applyPreviewZoom(parseInt(e.target.value) / 100));
+document.getElementById('canvas-wrap').addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  applyPreviewZoom(previewZoom * (e.deltaY < 0 ? 1.2 : 1/1.2));
+}, {passive: false});
+
+document.getElementById('btn-play').addEventListener('click', togglePlay);
+document.getElementById('btn-stop').addEventListener('click', () => { stopPlay(); state.currentFrame=0; renderFrame(0); updatePlayhead(); });
+document.getElementById('btn-rewind').addEventListener('click', () => { stopPlay(); state.currentFrame=0; renderFrame(0); updatePlayhead(); });
+document.getElementById('loop-toggle').addEventListener('change', e => state.loop = e.target.checked);
+document.getElementById('fps-input').addEventListener('change', e => { state.fps = Math.max(1, parseInt(e.target.value)||30); });
+document.getElementById('zoom-input').addEventListener('change', e => { state.zoom = Math.max(1, parseInt(e.target.value)||4); renderTimeline(); });
+document.getElementById('clear-btn').addEventListener('click', () => {
+  stopPlay();
+  state.tracks = [[],[],[],[]];
+  state.selectedSeg = null;
+  state.totalFrames = 0;
+  state.currentFrame = 0;
+  state.canvasW = 320; state.canvasH = 180;
+  previewCanvas.width = 320; previewCanvas.height = 180;
+  ctx.clearRect(0,0,320,180);
+  propBody.innerHTML = '<div id="prop-empty">Click a segment<br>to edit its properties</div>';
+  renderTimeline();
+  setStatus('Cleared');
+});
+
+// Track + buttons
+document.querySelectorAll('.track-add-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.pendingTrack = parseInt(btn.dataset.track);
+    fileInput.click();
+  });
+});
+
+fileInput.addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  fileInput.value = '';
+  if (state.pendingTrack !== null) {
+    await loadZipToTrack(file, state.pendingTrack);
+    state.pendingTrack = null;
+  }
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'ArrowRight') { stopPlay(); state.currentFrame = Math.min(state.currentFrame+1, state.totalFrames-1); renderFrame(state.currentFrame); updatePlayhead(); }
+  if (e.code === 'ArrowLeft')  { stopPlay(); state.currentFrame = Math.max(state.currentFrame-1, 0); renderFrame(state.currentFrame); updatePlayhead(); }
+  if (e.code === 'Home') { stopPlay(); state.currentFrame=0; renderFrame(0); updatePlayhead(); }
+  if (e.code === 'End')  { stopPlay(); state.currentFrame=state.totalFrames-1; renderFrame(state.currentFrame); updatePlayhead(); }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  EXPORT
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('export-btn').addEventListener('click', exportZip);
+
+async function exportZip() {
+  if (state.totalFrames < 1) { setStatus('Nothing to export'); return; }
+
+  stopPlay();
+  const modal = document.getElementById('modal-overlay');
+  const bar = document.getElementById('modal-bar');
+  const mstatus = document.getElementById('modal-status');
+  const mclose = document.getElementById('modal-close');
+  modal.classList.add('open');
+  mclose.style.display = 'none';
+  bar.style.width = '0%';
+
+  // Ask for export scale
+  const scaleStr = prompt('Export scale factor (1 = original size):', '1');
+  const scale = parseFloat(scaleStr) || 1;
+
+  const expW = Math.round(state.canvasW * scale);
+  const expH = Math.round(state.canvasH * scale);
+
+  const offscreen = document.createElement('canvas');
+  offscreen.width = expW; offscreen.height = expH;
+  const octx = offscreen.getContext('2d');
+
+  const zipParts = [];
+
+  function u16(n) { return [n & 0xff, (n >> 8) & 0xff]; }
+  function u32(n) { return [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >> 24) & 0xff]; }
+
+  function crc32(data) {
+    let crc = 0xFFFFFFFF;
+    for (let i=0; i<data.length; i++) {
+      crc ^= data[i];
+      for (let j=0; j<8; j++) crc = (crc & 1) ? (crc >>> 1) ^ 0xEDB88320 : crc >>> 1;
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  const centralDir = [];
+  let offset = 0;
+
+  for (let f=0; f<state.totalFrames; f++) {
+    mstatus.textContent = `Rendering frame ${f+1} / ${state.totalFrames}…`;
+    bar.style.width = ((f+1)/state.totalFrames*90) + '%';
+    await new Promise(r => setTimeout(r, 0));
+
+    // Render composite
+    octx.clearRect(0, 0, expW, expH);
+    octx.save();
+    if (scale !== 1) octx.scale(scale, scale);
+    for (let ti = state.tracks.length-1; ti >= 0; ti--) {
+      for (const seg of state.tracks[ti]) {
+        const localF = f - seg.startFrame;
+        if (localF < 0 || localF >= seg.frames.length) continue;
+        octx.globalCompositeOperation = seg.blend;
+        octx.globalAlpha = seg.opacity;
+        octx.drawImage(seg.frames[localF].img, 0, 0);
+      }
+    }
+    octx.restore();
+    octx.globalCompositeOperation = 'source-over';
+    octx.globalAlpha = 1;
+
+    // Get PNG bytes
+    const blob = await new Promise(r => offscreen.toBlob(r, 'image/png'));
+    const pngBytes = new Uint8Array(await blob.arrayBuffer());
+
+    const fname = `frame_${String(f).padStart(5,'0')}.png`;
+    const fnBytes = new TextEncoder().encode(fname);
+    const crc = crc32(pngBytes);
+
+    // Local file header
+    const lfh = new Uint8Array([
+      0x50,0x4B,0x03,0x04, // sig
+      20,0,                // version
+      0,0,                 // flags
+      0,0,                 // compression (stored)
+      0,0, 0,0,            // mod time/date
+      ...u32(crc),
+      ...u32(pngBytes.length),
+      ...u32(pngBytes.length),
+      ...u16(fnBytes.length),
+      0,0,                 // extra length
+    ]);
+    centralDir.push({ fnBytes, crc, size: pngBytes.length, offset });
+    zipParts.push(lfh, fnBytes, pngBytes);
+    offset += lfh.length + fnBytes.length + pngBytes.length;
+  }
+
+  // Central directory
+  const cdStart = offset;
+  for (const cd of centralDir) {
+    const cdfh = new Uint8Array([
+      0x50,0x4B,0x01,0x02, // sig
+      20,0, 20,0,          // versions
+      0,0, 0,0,            // flags, compression
+      0,0, 0,0,            // time, date
+      ...u32(cd.crc),
+      ...u32(cd.size),
+      ...u32(cd.size),
+      ...u16(cd.fnBytes.length),
+      0,0, 0,0, 0,0,       // extra, comment, disk
+      0,0,                 // int attribs
+      0,0,0,0,             // ext attribs
+      ...u32(cd.offset),
+    ]);
+    zipParts.push(cdfh, cd.fnBytes);
+    offset += cdfh.length + cd.fnBytes.length;
+  }
+
+  // End of central directory
+  const eocd = new Uint8Array([
+    0x50,0x4B,0x05,0x06,
+    0,0, 0,0,
+    ...u16(centralDir.length),
+    ...u16(centralDir.length),
+    ...u32(offset - cdStart),
+    ...u32(cdStart),
+    0,0,
+  ]);
+  zipParts.push(eocd);
+
+  // Assemble
+  const totalSize = zipParts.reduce((s,p)=>s+p.length, 0);
+  const out = new Uint8Array(totalSize);
+  let pos = 0;
+  for (const p of zipParts) { out.set(p, pos); pos += p.length; }
+
+  bar.style.width = '100%';
+  mstatus.textContent = `Done! ${state.totalFrames} frames exported.`;
+  mclose.style.display = 'block';
+
+  // Download
+  const dl = URL.createObjectURL(new Blob([out], {type:'application/zip'}));
+  const a = document.createElement('a'); a.href=dl; a.download='anim_forge_export.zip'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(dl), 5000);
+
+  modal.classList.remove('open');
+  setStatus(`Exported ${state.totalFrames} frames`);
+}
+
+document.getElementById('modal-close').addEventListener('click', () => {
+  document.getElementById('modal-overlay').classList.remove('open');
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  UTIL
+// ═══════════════════════════════════════════════════════════════
+function setStatus(msg) {
+  statusEl.textContent = msg;
+  console.log('[AnimForge]', msg);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+renderTimeline();
+renderFrame(0);
+setStatus('Ready – click + on a track to load a ZIP');
+</script>
+</body>
+</html>

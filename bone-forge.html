@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bone Forge -- Pixel Art Skeletal Animator</title>
+<style>
+:root{
+  --bg:#0e0e12; --panel:#16161c; --panel2:#1e1e26; --border:#2a2a36;
+  --accent:#e8a020; --accent2:#7a3a08;
+  --bone:#f0c060; --bone-sel:#ffe080;
+  --text:#d0cfe8; --dim:#9896b8;
+  --green:#40c070; --red:#e05040; --blue:#4090e8;
+  --pivot:#40c8ff;
+  --font:'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;display:flex;flex-direction:column;}
+button{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:5px 11px;cursor:pointer;font-family:var(--font);font-size:13px;border-radius:2px;white-space:nowrap;}
+button:hover{border-color:var(--accent);color:var(--accent);}
+button.hi{background:var(--accent2);border-color:var(--accent);color:#fff;}
+button.danger:hover{border-color:var(--red);color:var(--red);}
+select,input[type=number],input[type=text],input[type=checkbox]{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:3px 6px;font-family:var(--font);font-size:13px;border-radius:2px;}
+select:focus,input:focus{outline:none;border-color:var(--accent);}
+label{color:var(--dim);font-size:13px;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--panel);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* ── TOP BAR ── */
+#topbar{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;}
+.logo{font-size:15px;font-weight:bold;color:var(--accent);letter-spacing:2px;margin-right:4px;}
+.sep{width:1px;height:20px;background:var(--border);margin:0 2px;}
+#mode-hint{font-size:12px;color:var(--dim);margin-left:4px;}
+
+/* ── LAYOUT ── */
+#main{display:flex;flex:1;min-height:0;}
+
+/* ── LEFT ── */
+#left{width:210px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);background:var(--panel);}
+.ph{padding:6px 9px;background:var(--panel);border-bottom:1px solid var(--border);font-size:11px;color:var(--accent);letter-spacing:1px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.ph button{padding:2px 7px;font-size:11px;}
+
+/* sprite list */
+#sprite-list{overflow-y:auto;flex:0 0 auto;max-height:220px;}
+.spr{display:flex;align-items:center;gap:6px;padding:4px 7px;cursor:pointer;border-bottom:1px solid #1a1a22;}
+.spr:hover{background:var(--panel2);}
+.spr.sel{background:#1a1624;border-left:2px solid var(--accent);}
+.spr canvas{width:28px;height:28px;image-rendering:pixelated;flex-shrink:0;}
+.spr-info{flex:1;min-width:0;}
+.spr-name{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.spr-dim{font-size:10px;color:var(--dim);}
+.spr-btns{display:flex;gap:2px;}
+.spr-btns button{padding:2px 4px;font-size:10px;}
+
+/* bone tree */
+#bone-tree-wrap{flex:1;overflow-y:auto;min-height:0;}
+#bone-tree{padding:3px 0;}
+.bn{padding:4px 7px;cursor:pointer;display:flex;align-items:center;gap:5px;border-bottom:1px solid #12121a;}
+.bn:hover{background:var(--panel2);}
+.bn.sel{background:#1e1a08;border-left:2px solid var(--bone-sel);}
+.bn.dragover{background:#2a2010!important;}
+.bn-dot{width:8px;height:8px;border-radius:50%;background:var(--bone);flex-shrink:0;}
+.bn-dot.sp{background:var(--green);}
+.bn-lbl{font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* props */
+#props{flex-shrink:0;border-top:1px solid var(--border);}
+#props-body{padding:7px 9px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:340px;}
+.pr{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.pr label{width:40px;flex-shrink:0;color:var(--dim);}
+.pr input[type=number]{width:56px;}
+.pr input[type=text]{width:106px;}
+
+/* attach-point button */
+.pivot-box{background:#0a1820;border:1px solid #1a3848;border-radius:2px;padding:6px 8px;display:flex;flex-direction:column;gap:4px;}
+.pivot-box-title{font-size:11px;color:var(--pivot);letter-spacing:.5px;}
+.pivot-box-hint{font-size:10px;color:var(--dim);line-height:1.4;}
+#btn-set-pivot{padding:5px 7px;font-size:12px;border-color:var(--pivot);color:var(--pivot);width:100%;}
+#btn-set-pivot:hover{background:#0a2a36;}
+
+/* ── VIEWPORT ── */
+#vp-wrap{flex:1;position:relative;overflow:hidden;background:#080810;}
+#vp{display:block;image-rendering:pixelated;}
+#vp.sel{cursor:default;}
+#vp.bone{cursor:crosshair;}
+#vp.pan{cursor:grab;}
+#vp.pan.panning{cursor:grabbing;}
+#vp.pivot-hover{cursor:cell;}
+#vp.ik{cursor:crosshair;}
+#vp-info{position:absolute;top:6px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);padding:3px 12px;font-size:12px;color:var(--dim);pointer-events:none;border-radius:2px;white-space:nowrap;}
+
+/* ── RIGHT ── */
+#right{width:205px;flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid var(--border);background:var(--panel);}
+#anim-list{overflow-y:auto;max-height:none;flex:1;}
+.ai{padding:5px 8px;cursor:pointer;border-bottom:1px solid #1a1a22;font-size:13px;display:flex;align-items:center;gap:7px;}
+.ai:hover{background:var(--panel2);}
+.ai.sel{background:#1a1a28;border-left:2px solid var(--accent);}
+.ai-thumb{width:48px;height:36px;flex-shrink:0;image-rendering:pixelated;border:1px solid var(--border);background:#080810;}
+.ai-info{flex:1;min-width:0;}
+.ai-name{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ai-frames{font-size:10px;color:var(--dim);}
+.ai-dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex-shrink:0;}
+.ai-dot.play{background:var(--green);}
+#anim-cfg{padding:7px 9px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;flex-shrink:0;}
+
+/* ── Z-ORDER ── */
+#zorder-panel{flex-shrink:0;border-top:1px solid var(--border);max-height:130px;display:flex;flex-direction:column;}
+#zorder-list{overflow-y:auto;flex:1;}
+.zo{display:flex;align-items:center;gap:5px;padding:3px 7px;border-bottom:1px solid #12121a;font-size:12px;}
+.zo:hover{background:var(--panel2);}
+.zo.sel{background:#1e1a08;color:var(--bone-sel);}
+.zo-num{color:var(--dim);font-size:10px;width:18px;flex-shrink:0;text-align:right;}
+.zo-dot{width:7px;height:7px;border-radius:50%;background:var(--bone);flex-shrink:0;}
+.zo-dot.sp{background:var(--green);}
+.zo-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.zo-btns{display:flex;gap:2px;flex-shrink:0;}
+.zo-btns button{padding:1px 5px;font-size:11px;}
+
+/* ── TIMELINE ── */
+#tl{height:170px;display:flex;flex-direction:column;border-top:1px solid var(--border);flex-shrink:0;}
+#tl-top{display:flex;align-items:center;gap:6px;padding:4px 9px;border-bottom:1px solid var(--border);background:var(--panel);flex-shrink:0;}
+#tl-body{display:flex;flex:1;min-height:0;}
+#tl-names{width:160px;flex-shrink:0;border-right:1px solid var(--border);overflow:hidden;}
+#tl-names-inner{padding-top:22px;}
+.tl-lbl{height:22px;line-height:22px;padding:0 7px;font-size:12px;color:var(--dim);border-bottom:1px solid #12121a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tl-lbl.sel{color:var(--bone-sel);}
+#tl-scroll{flex:1;overflow-x:auto;overflow-y:hidden;position:relative;}
+#tl-wrap{position:relative;}
+#tl-canvas{display:block;cursor:pointer;}
+#tl-ph{position:absolute;top:0;width:2px;background:var(--red);pointer-events:none;}
+
+/* ── PIVOT INSPECTOR ── */
+#pi-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
+#pi-overlay.show{display:flex;}
+#pi-box{background:var(--panel);border:1px solid var(--border);border-radius:3px;padding:14px 18px;display:flex;flex-direction:column;gap:10px;max-width:90vw;}
+#pi-title{color:var(--pivot);font-size:15px;font-weight:bold;}
+#pi-hint{color:var(--dim);font-size:13px;line-height:1.5;}
+#pi-canvas-wrap{position:relative;overflow:auto;max-width:80vw;max-height:60vh;border:1px solid var(--border);background:#080810;cursor:crosshair;}
+#pi-canvas{display:block;image-rendering:pixelated;}
+#pi-btns{display:flex;gap:9px;justify-content:flex-end;}
+
+/* -- HELP WINDOW -- */
+#help-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:400;align-items:center;justify-content:center;}
+#help-overlay.show{display:flex;}
+#help-box{background:var(--panel);border:1px solid var(--border);border-radius:4px;width:min(820px,92vw);max-height:88vh;display:flex;flex-direction:column;}
+#help-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;}
+#help-header h2{color:var(--accent);font-size:16px;letter-spacing:1px;}
+#help-close{padding:4px 12px;font-size:13px;}
+#help-body{overflow-y:auto;padding:20px 24px;font-size:13px;line-height:1.7;color:var(--text);}
+#help-body h3{color:var(--accent);font-size:14px;margin:18px 0 6px;letter-spacing:.5px;border-bottom:1px solid var(--border);padding-bottom:4px;}
+#help-body h3:first-child{margin-top:0;}
+#help-body h4{color:var(--bone);font-size:13px;margin:12px 0 4px;}
+#help-body p{margin-bottom:8px;color:#b0aed0;}
+#help-body ul{margin:4px 0 10px 18px;color:#b0aed0;}
+#help-body li{margin-bottom:3px;}
+#help-body kbd{background:var(--panel2);border:1px solid var(--border);border-radius:2px;padding:1px 5px;font-family:var(--font);font-size:11px;color:var(--text);}
+#help-body .step{display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;}
+#help-body .step-num{background:var(--accent2);border:1px solid var(--accent);color:var(--accent);width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;margin-top:2px;}
+#help-body .step-txt{flex:1;color:#b0aed0;}
+#help-body .step-txt b{color:var(--text);}
+.undo-label{font-size:10px;color:var(--dim);}
+
+/* ── MODAL ── */
+#modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:center;justify-content:center;}
+#modal-bg.show{display:flex;}
+#modal{background:var(--panel);border:1px solid var(--border);padding:16px 20px;border-radius:3px;min-width:260px;}
+#modal h3{color:var(--accent);margin-bottom:12px;font-size:15px;}
+.mrow{margin-bottom:8px;display:flex;flex-direction:column;gap:3px;}
+.mrow label{color:var(--dim);}
+.mrow input,.mrow select{width:100%;}
+.mbtns{display:flex;gap:9px;margin-top:12px;justify-content:flex-end;}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <span class="logo">⬡ BONE FORGE</span>
+  <div class="sep"></div>
+  <label style="color:var(--dim)">Mode:</label>
+  <button id="btn-sel" class="hi" title="Select &amp; rotate bones (V)">V Select</button>
+  <button id="btn-bone" title="Add bone (B)">B Bone</button>
+  <button id="btn-ik" title="IK -- drag chain tip (I)">I IK</button>
+  <button id="btn-pan" title="Pan view (P / right-drag)">⊹ Pan</button>
+  <div class="sep"></div>
+  <button id="btn-sprites">+ Sprites</button>
+  <input type="file" id="file-in" multiple accept="image/png,image/gif" style="display:none">
+  <div class="sep"></div>
+  <button id="btn-play">▶ Play</button>
+  <button id="btn-stop">■ Stop</button>
+  <label>FPS</label><input type="number" id="fps" value="12" min="1" max="60" style="width:38px">
+  <div class="sep"></div>
+  <button id="btn-addkey" title="Add keyframe for selected bone">+ Key</button>
+  <button id="btn-addpose" title="Bake all bones as keyframe">+ Pose</button>
+  <button id="btn-copypose" title="Copy current pose">⎘ Copy</button>
+  <button id="btn-pastepose" title="Paste pose at current frame">⎘ Paste</button>
+  <div class="sep"></div>
+  <button id="btn-onion" title="Toggle onion skinning">🧅 Onion</button>
+  <div class="sep"></div>
+  <button id="btn-save" title="Save project as JSON">💾 Save</button>
+  <button id="btn-load" title="Load project from JSON">📂 Load</button>
+  <input type="file" id="file-proj" accept=".json" style="display:none">
+  <div class="sep"></div>
+  <button id="btn-export">⬇ Export ZIP</button>
+  <div class="sep"></div>
+  <button id="btn-zoom-out">−</button>
+  <button id="btn-zoom-fit">fit</button>
+  <button id="btn-zoom-in">+</button>
+  <div class="sep"></div>
+  <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
+  <button id="btn-redo" title="Redo (Ctrl+Y)">↪ Redo</button>
+  <div class="sep"></div>
+  <button id="btn-help" title="Help &amp; Instructions">? Help</button>
+  <span id="mode-hint"></span>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <!-- LEFT -->
+  <div id="left">
+    <div class="ph">Sprites <button id="btn-sp-add">+</button></div>
+    <div id="sprite-list"></div>
+
+    <div class="ph">Skeleton <button id="btn-bone-root">+ root</button></div>
+    <div id="bone-tree-wrap"><div id="bone-tree"></div></div>
+
+    <div id="zorder-panel">
+      <div class="ph">Z-Order <span style="color:var(--dim);font-size:10px">(draw order)</span></div>
+      <div id="zorder-list"></div>
+    </div>
+
+    <div id="props">
+      <div class="ph">Properties</div>
+      <div id="props-body"><div style="color:var(--dim);font-size:10px;padding:4px">Select a bone</div></div>
+    </div>
+  </div>
+
+  <!-- VIEWPORT -->
+  <div id="vp-wrap">
+    <canvas id="vp"></canvas>
+    <div id="vp-info">Frame <span id="vp-f">0</span> / <span id="vp-ft">0</span></div>
+  </div>
+
+  <!-- RIGHT -->
+  <div id="right">
+    <div class="ph">Animations <button id="btn-new-anim">+</button></div>
+    <div id="anim-list"></div>
+    <div id="anim-cfg">
+      <div class="pr"><label>Name</label><input type="text" id="an-name" style="width:100px"></div>
+      <div class="pr"><label>Frames</label><input type="number" id="an-frames" value="24" min="1" style="width:46px"></div>
+      <div class="pr"><label>Loop</label><input type="checkbox" id="an-loop" checked></div>
+      <button id="btn-upd-anim">Update</button>
+      <div style="border-top:1px solid var(--border);margin:2px -8px;padding:4px 8px 0;">
+        <div style="font-size:10px;color:var(--accent);margin-bottom:4px;">EASING</div>
+        <select id="ease" style="width:100%">
+          <option value="linear">Linear</option>
+          <option value="easeInOut" selected>Ease In-Out</option>
+          <option value="easeIn">Ease In</option>
+          <option value="easeOut">Ease Out</option>
+          <option value="step">Step</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TIMELINE -->
+<div id="tl">
+  <div id="tl-top">
+    <button id="tl-prev">◀</button>
+    <button id="tl-next">▶</button>
+    <span id="tl-flbl" style="color:var(--accent);min-width:58px;font-size:12px;">Frame 0</span>
+    <div class="sep"></div>
+    <button id="tl-delkey" class="danger">− Key</button>
+    <div class="sep"></div>
+    <label style="color:var(--dim)">Zoom</label>
+    <input type="range" id="tl-zoom" min="8" max="32" value="14" style="width:65px">
+  </div>
+  <div id="tl-body">
+    <div id="tl-names"><div id="tl-names-inner"></div></div>
+    <div id="tl-scroll"><div id="tl-wrap">
+      <canvas id="tl-canvas"></canvas>
+      <div id="tl-ph"></div>
+    </div></div>
+  </div>
+</div>
+
+<!-- STATUS -->
+<div id="status">Ready -- load sprites, build skeleton, animate!</div>
+
+<!-- PIVOT INSPECTOR OVERLAY -->
+<div id="pi-overlay">
+  <div id="pi-box">
+    <div id="pi-title">⊕ Set Bone on Sprite</div>
+    <div id="pi-hint">Drag <span style="color:#40c8ff">⊕ START</span> -- where the bone attaches (pivot point).<br>Drag <span style="color:#ffe080">◎ END</span> -- where the bone ends (sets length).<br><span style="color:var(--dim)">In viewport you can only rotate -- length is locked here.</span></div>
+    <div id="pi-canvas-wrap"><canvas id="pi-canvas"></canvas></div>
+    <div id="pi-btns">
+      <button id="pi-cancel">Cancel</button>
+      <button id="pi-center">Reset START to center</button>
+      <button id="pi-ok" class="hi">✓ Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-bg">
+  <div id="modal">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div class="mbtns">
+      <button id="modal-cancel">Cancel</button>
+      <button id="modal-ok" class="hi">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- HELP OVERLAY -->
+<div id="help-overlay">
+  <div id="help-box">
+    <div id="help-header">
+      <h2>⬡ BONE FORGE — Help &amp; Instructions</h2>
+      <button id="help-close">✕ Close</button>
+    </div>
+    <div id="help-body">
+      <h3>Quick Start — From Zero to Animation</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-txt"><b>Load sprites</b> — Click <kbd>+ Sprites</kbd> in the topbar. Load separate PNG files for each body part (head, torso, upper arm, lower arm, etc.). Each part should have a transparent background. The editor auto-trims empty space.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-txt"><b>Add root bone</b> — Click <kbd>+ root</kbd> in the Skeleton panel. Then press <kbd>B</kbd> (Bone mode) and click+drag in the viewport to draw the first bone (e.g. torso). The drag sets length and direction.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-txt"><b>Build the skeleton</b> — Select a bone, press <kbd>B</kbd>, click+drag from its tip to add a child bone. Repeat for each limb. You can also drag bones in the Skeleton tree to re-parent them.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-txt"><b>Attach sprites</b> — Select a bone in the tree, then click a sprite in the Sprites panel to attach it. A green dot on the bone means it has a sprite.</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-txt"><b>Set attachment point</b> — In Properties, click <kbd>🖊 Set on sprite…</kbd>. Drag the <b style="color:#40c8ff">cyan ⊕ START</b> handle to where the bone attaches (e.g. shoulder joint on an arm sprite). Drag <b style="color:#ffe080">yellow ◎ END</b> to set bone length. Click Confirm. The sprite will not rotate or move.</div></div>
+      <div class="step"><div class="step-num">6</div><div class="step-txt"><b>Z-order</b> — Use the Z-Order panel to control which sprites render on top. Use ↑↓ buttons to reorder.</div></div>
+      <div class="step"><div class="step-num">7</div><div class="step-txt"><b>Create an animation</b> — Click <kbd>+</kbd> in the Animations panel (right side). Give it a name and frame count.</div></div>
+      <div class="step"><div class="step-num">8</div><div class="step-txt"><b>Animate</b> — Navigate to a frame with <kbd>◀ ▶</kbd> or <kbd>← →</kbd> keys. In Select mode, drag a bone tip to rotate it. Then click <kbd>+ Key</kbd> to save a keyframe, or <kbd>+ Pose</kbd> to save all bones at once. Repeat at different frames.</div></div>
+      <div class="step"><div class="step-num">9</div><div class="step-txt"><b>Preview</b> — Press <kbd>▶ Play</kbd> or <kbd>Space</kbd> to preview. Use <kbd>🧅 Onion</kbd> to see ghost frames (blue = previous, red = next).</div></div>
+      <div class="step"><div class="step-num">10</div><div class="step-txt"><b>Export</b> — Click <kbd>⬇ Export ZIP</kbd> to download individual PNG frames. Or <kbd>💾 Save</kbd> to save the whole project as JSON for later editing.</div></div>
+
+      <h3>Viewport Controls</h3>
+      <ul>
+        <li><b>Drag bone tip</b> — Rotate the bone around its attachment point</li>
+        <li><b>Drag bone root</b> (root bones only) — Move the bone in world space</li>
+        <li><b>Right-click drag / Alt+drag / Middle-click</b> — Pan the view</li>
+        <li><b>Scroll</b> — Pan up/down/left/right</li>
+        <li><b>Shift+Scroll / Ctrl+Scroll / Pinch</b> — Zoom in/out</li>
+        <li><b>I IK mode</b> — Drag any bone tip and the whole parent chain follows (FABRIK inverse kinematics)</li>
+      </ul>
+
+      <h3>Keyboard Shortcuts</h3>
+      <ul>
+        <li><kbd>V</kbd> — Select mode</li>
+        <li><kbd>B</kbd> — Add Bone mode</li>
+        <li><kbd>I</kbd> — IK mode</li>
+        <li><kbd>P</kbd> — Pan mode</li>
+        <li><kbd>O</kbd> — Toggle Onion Skinning</li>
+        <li><kbd>Space</kbd> — Play / Stop</li>
+        <li><kbd>← →</kbd> — Previous / Next frame</li>
+        <li><kbd>Delete</kbd> — Delete selected bone (and its children)</li>
+        <li><kbd>Ctrl+Z</kbd> — Undo</li>
+        <li><kbd>Ctrl+Y</kbd> / <kbd>Ctrl+Shift+Z</kbd> — Redo</li>
+        <li><kbd>Ctrl+C</kbd> — Copy current pose</li>
+        <li><kbd>Ctrl+V</kbd> — Paste pose at current frame</li>
+      </ul>
+
+      <h3>Timeline</h3>
+      <ul>
+        <li><b>Click</b> on a frame — Seek to that frame</li>
+        <li><b>Click a keyframe diamond</b> — Select that bone + seek to frame</li>
+        <li><b>Shift+Click</b> keyframes — Multi-select keyframes</li>
+        <li><b>Drag selected keyframes</b> — Move them in time together</li>
+        <li><kbd>+ Key</kbd> — Add keyframe for selected bone at current frame</li>
+        <li><kbd>+ Pose</kbd> — Add keyframes for ALL bones at current frame</li>
+        <li><kbd>− Key</kbd> — Delete keyframe for selected bone at current frame</li>
+        <li><b>TL Zoom slider</b> — Zoom the timeline horizontally</li>
+      </ul>
+
+      <h3>Skeleton Tree</h3>
+      <ul>
+        <li><b>Click</b> — Select bone</li>
+        <li><b>Double-click</b> — Rename bone inline</li>
+        <li><b>Drag &amp; Drop</b> — Re-parent a bone to another</li>
+        <li>Green dot = sprite attached, yellow dot = no sprite</li>
+      </ul>
+
+      <h3>Animations Panel</h3>
+      <ul>
+        <li><b>Click</b> — Switch to that animation</li>
+        <li><b>Double-click name</b> — Rename animation inline</li>
+        <li>Thumbnail shows frame 0 pose</li>
+        <li>Update Name/Frames/Loop with the fields below, then click <kbd>Update</kbd></li>
+      </ul>
+
+      <h3>Sprite Inspector (Set on sprite…)</h3>
+      <ul>
+        <li>Drag <b style="color:#40c8ff">⊕ START</b> — attachment point on the sprite (where the bone "plugs in")</li>
+        <li>Drag <b style="color:#ffe080">◎ END</b> — sets bone length (how long the bone is in sprite pixels)</li>
+        <li>START must stay inside the sprite; END can go outside for long bones</li>
+        <li>Click <kbd>Reset START to center</kbd> to reset pivot to sprite center</li>
+        <li>Bone angle is NOT changed — sprite stays upright after Confirm</li>
+        <li>Rotate bones in the viewport after confirming</li>
+      </ul>
+
+      <h3>Tips for Pixel Art</h3>
+      <ul>
+        <li>Prepare each body part as a separate transparent PNG</li>
+        <li>Name files clearly: <code>body.png</code>, <code>arm_upper.png</code>, etc.</li>
+        <li>Use Z-Order panel to set which parts are in front (e.g. front arm above torso)</li>
+        <li>Use <kbd>🧅 Onion</kbd> to check timing — blue = where you were, red = where you're going</li>
+        <li>Use <kbd>+ Pose</kbd> at frame 0 to lock the rest pose, then animate from there</li>
+        <li>Save your project with <kbd>💾 Save</kbd> often — the JSON includes all sprites as base64</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// --------------------------------------------
+//  BONE FORGE  --  core concepts:
+//
+//  BONE:   A joint with position (x,y) and rotation (angle).
+//          Children are chained to their parent's tip.
+//          In rest pose: bone.x/y/angle  (world for roots, local for children)
+//
+//  SPRITE: A PNG image loaded into the tool.
+//
+//  ATTACHMENT: A bone can have one sprite attached to it.
+//          bone.spriteId  = which sprite
+//          bone.pivotX/Y  = pixel coords inside the *trimmed* sprite where
+//                           the bone root connects.  This is the "attachment point".
+//                           It equals the origin of the bone's local space.
+//          When rendering:  translate to bone-root world pos,
+//                           rotate by bone world angle,
+//                           draw sprite offset by (-pivotX, -pivotY).
+//
+//  KEYFRAME: {frame, boneId, angle, x, y} -- overrides rest pose for that frame.
+// --------------------------------------------
+
+// -- CONSTANTS -----------------------------------
+const PI_ZOOM = 4; // zoom level inside pivot inspector
+
+// -- STATE ---------------------------------------
+const S = {
+  sprites:    [],
+  bones:      [],
+  anims:      [],
+  anim:       null,
+  frame:      0,
+  playing:    false,
+  timer:      null,
+  selBone:    null,
+  mode:       'sel',
+  vp:         {x:0,y:0,zoom:2},
+  drag:       null,
+  ikDrag:     null,
+  boneDraft:  null,
+  panStart:   null,
+  tlZoom:     14,
+  onion:      true,
+  copiedPose: null,
+  selKeys:    [],   // [{boneId, frame}] multi-selected keyframes
+  tlDrag:     null, // {startX, keys:[{kf,origFrame}]} dragging selected keys
+};
+let _id=1; const uid=()=>_id++;
+
+// -- UNDO/REDO -----------------------------------
+const UNDO_MAX=50;
+let undoStack=[], redoStack=[];
+
+function snapshotState(){
+  // Deep-clone bones and anims (not sprites — too heavy)
+  return{
+    bones: JSON.parse(JSON.stringify(S.bones)),
+    anims: JSON.parse(JSON.stringify(S.anims)),
+    animId: S.anim?.id??null,
+    frame: S.frame,
+    selBone: S.selBone,
+  };
+}
+function pushUndo(){
+  undoStack.push(snapshotState());
+  if(undoStack.length>UNDO_MAX)undoStack.shift();
+  redoStack=[];
+  updateUndoButtons();
+}
+function applySnapshot(snap){
+  S.bones=snap.bones;
+  S.anims=snap.anims;
+  S.anim=S.anims.find(a=>a.id===snap.animId)??null;
+  S.frame=snap.frame;
+  S.selBone=snap.selBone;
+  S.selKeys=[];
+  renderBoneTree();renderProps();renderZOrder();renderAnimList();renderTL();renderVP();syncAnimCfg();
+}
+function undo(){
+  if(!undoStack.length){setstatus('Nothing to undo');return;}
+  redoStack.push(snapshotState());
+  applySnapshot(undoStack.pop());
+  updateUndoButtons();
+  setstatus('Undo');
+}
+function redo(){
+  if(!redoStack.length){setstatus('Nothing to redo');return;}
+  undoStack.push(snapshotState());
+  applySnapshot(redoStack.pop());
+  updateUndoButtons();
+  setstatus('Redo');
+}
+function updateUndoButtons(){
+  $('#btn-undo').style.opacity=undoStack.length?'1':'.4';
+  $('#btn-redo').style.opacity=redoStack.length?'1':'.4';
+}
+
+// -- EASING --------------------------------------
+const EASE={
+  linear:   t=>t,
+  easeIn:   t=>t*t,
+  easeOut:  t=>t*(2-t),
+  easeInOut:t=>t<.5?2*t*t:-1+(4-2*t)*t,
+  step:     t=>t>=1?1:0,
+};
+const getEase=()=>EASE[document.getElementById('ease').value]||EASE.linear;
+
+// -- HELPERS -------------------------------------
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const lerpAng=(a,b,t)=>{let d=((b-a)%360+540)%360-180;return a+d*t;};
+const setstatus=s=>$('#status').textContent=s;
+const deg2rad=d=>d*Math.PI/180;
+
+// -- AUTO TRIM -----------------------------------
+function autoTrim(img){
+  const c=document.createElement('canvas');c.width=img.width;c.height=img.height;
+  const x=c.getContext('2d');x.drawImage(img,0,0);
+  const d=x.getImageData(0,0,img.width,img.height).data;
+  let x0=img.width,y0=img.height,x1=0,y1=0;
+  for(let r=0;r<img.height;r++)for(let c2=0;c2<img.width;c2++){
+    if(d[(r*img.width+c2)*4+3]>4){
+      if(c2<x0)x0=c2;if(c2>x1)x1=c2;if(r<y0)y0=r;if(r>y1)y1=r;
+    }
+  }
+  if(x1<x0)return{tx:0,ty:0,tw:img.width,th:img.height};
+  return{tx:x0,ty:y0,tw:x1-x0+1,th:y1-y0+1};
+}
+
+// -- SPRITE LOAD ---------------------------------
+function loadSprites(files){
+  [...files].forEach(f=>{
+    const url=URL.createObjectURL(f);
+    const img=new Image();
+    img.onload=()=>{
+      const{tx,ty,tw,th}=autoTrim(img);
+      S.sprites.push({id:uid(),name:f.name.replace(/\.[^.]+$/,''),img,trimX:tx,trimY:ty,trimW:tw,trimH:th});
+      renderSpriteList();renderVP();
+    };
+    img.src=url;
+  });
+}
+
+// -- BONE HELPERS --------------------------------
+const getBone=id=>S.bones.find(b=>b.id===id);
+const boneDepth=id=>{let d=0,b=getBone(id);while(b&&b.parentId!=null){d++;b=getBone(b.parentId);}return d;};
+
+// World transform of bone ROOT (the pivot point in world space) and world angle.
+// bone.angle = rotation applied to the bone IN ADDITION to parent.
+// bone.x/y   = world pos for root bones, local offset for child bones.
+//
+// Key insight: the sprite is drawn at the bone root, rotated by wa.
+// bone.angle=0 means sprite is upright (as drawn). Rotating bone.angle rotates sprite.
+// pivotX/Y = which pixel of the sprite sits at the bone root.
+// END (tip) = bone root + rotate(endOffset, wa) where endOffset = (endX-pivX, endY-pivY)
+//   stored as bone.tipDX / bone.tipDY in sprite-local pixels.
+// bone.length = Math.hypot(tipDX, tipDY) -- kept for child chaining.
+function boneWT(bone,frame){
+  if(!bone)return{wx:0,wy:0,wa:0};
+  const ip=interpBone(bone.id,frame);
+  if(bone.parentId==null) return{wx:ip.x,wy:ip.y,wa:ip.angle};
+  const par=getBone(bone.parentId);
+  const pw=boneWT(par,frame);
+  // child root = parent tip in world space
+  const parTip=boneWorldTip(par,frame);
+  return{wx:parTip.x+ip.x, wy:parTip.y+ip.y, wa:pw.wa+ip.angle};
+}
+
+// World position of bone TIP = root + rotate(tipOffset, wa)
+// tipDX/tipDY are sprite-local pixels from pivot to end
+function boneWorldTip(bone,frame){
+  const{wx,wy,wa}=boneWT(bone,frame);
+  const r=deg2rad(wa);
+  const dx=bone.tipDX??bone.length;  // fallback: length to right
+  const dy=bone.tipDY??0;
+  return{
+    x: wx + Math.cos(r)*dx - Math.sin(r)*dy,
+    y: wy + Math.sin(r)*dx + Math.cos(r)*dy,
+  };
+}
+// Keep boneTip as alias for compatibility
+function boneTip(bone,frame){ return boneWorldTip(bone,frame); }
+
+// -- IK -- FABRIK SOLVER --------------------------------
+// Returns chain: array of bones from root to leaf (ancestor first).
+function ikChain(leafBone){
+  const chain=[];
+  let b=leafBone;
+  while(b){chain.unshift(b);if(b.parentId==null)break;b=getBone(b.parentId);}
+  return chain;
+}
+
+// Solve IK for a chain of bones so that the tip of the last bone
+// reaches targetWX/WY. Uses FABRIK (iterative, works for any length).
+// Modifies bone.angle (rest pose) or keyframe angles at current frame.
+function solveIK(chain, targetWX, targetWY){
+  if(chain.length===0)return;
+  const frame=S.frame;
+  const ITERS=12, TOL=0.5;
+
+  // Collect current positions of each joint (root of each bone) + final tip
+  // positions[] has chain.length+1 entries: [root0, root1, ..., tip_last]
+  const positions=[];
+  for(const b of chain){
+    const wt=boneWT(b,frame);
+    positions.push({x:wt.wx, y:wt.wy});
+  }
+  // tip of last bone
+  const lastTip=boneWorldTip(chain[chain.length-1],frame);
+  positions.push({x:lastTip.x, y:lastTip.y});
+
+  // lengths[i] = length of chain[i] bone
+  const lengths=chain.map(b=>b.length);
+
+  // Fixed base = root of first bone (stays in place)
+  const base={x:positions[0].x, y:positions[0].y};
+  const target={x:targetWX, y:targetWY};
+
+  // Total reach check
+  const totalLen=lengths.reduce((s,l)=>s+l,0);
+  const distToTarget=Math.hypot(target.x-base.x, target.y-base.y);
+
+  // FABRIK iterations
+  for(let iter=0;iter<ITERS;iter++){
+    // Forward pass: move tip to target, pull back each joint
+    positions[positions.length-1]={x:target.x,y:target.y};
+    for(let i=positions.length-2;i>=0;i--){
+      const r=Math.hypot(positions[i+1].x-positions[i].x, positions[i+1].y-positions[i].y)||0.001;
+      const lambda=lengths[i]/r;
+      positions[i]={
+        x:(1-lambda)*positions[i+1].x+lambda*positions[i].x,
+        y:(1-lambda)*positions[i+1].y+lambda*positions[i].y,
+      };
+    }
+    // Backward pass: fix base, pull forward
+    positions[0]={x:base.x,y:base.y};
+    for(let i=0;i<positions.length-1;i++){
+      const r=Math.hypot(positions[i+1].x-positions[i].x, positions[i+1].y-positions[i].y)||0.001;
+      const lambda=lengths[i]/r;
+      positions[i+1]={
+        x:(1-lambda)*positions[i].x+lambda*positions[i+1].x,
+        y:(1-lambda)*positions[i].y+lambda*positions[i+1].y,
+      };
+    }
+    if(Math.hypot(positions[positions.length-1].x-target.x,
+                  positions[positions.length-1].y-target.y)<TOL)break;
+  }
+
+  // Convert positions back to bone angles
+  for(let i=0;i<chain.length;i++){
+    const bone=chain[i];
+    const p0=positions[i], p1=positions[i+1];
+    const worldAngle=Math.atan2(p1.y-p0.y, p1.x-p0.x)*180/Math.PI;
+    const tipLocalAngle=Math.atan2(bone.tipDY??0, bone.tipDX??bone.length)*180/Math.PI;
+    const parWA=bone.parentId!=null?boneWT(getBone(bone.parentId),frame).wa:0;
+    const localAngle=worldAngle-tipLocalAngle-parWA;
+    // Apply: update keyframe or rest pose
+    const prevSel=S.selBone;
+    S.selBone=bone.id;
+    setInterp('angle',localAngle);
+    S.selBone=prevSel;
+  }
+}
+
+// -- KEYFRAME INTERPOLATION ----------------------
+function interpBone(id,frame){
+  const b=getBone(id);
+  const base={angle:b.angle,x:b.x,y:b.y};
+  if(!S.anim)return base;
+  const keys=S.anim.keyframes.filter(k=>k.boneId===id).sort((a,b2)=>a.frame-b2.frame);
+  if(!keys.length)return base;
+  const ease=getEase();
+  let prev=null,next=null;
+  for(const k of keys){if(k.frame<=frame)prev=k;}
+  for(const k of keys){if(k.frame>=frame&&!next)next=k;}
+  if(!prev&&next)return{angle:next.angle,x:next.x,y:next.y};
+  if(prev&&!next)return{angle:prev.angle,x:prev.x,y:prev.y};
+  if(prev===next)return{angle:prev.angle,x:prev.x,y:prev.y};
+  const t=ease((frame-prev.frame)/(next.frame-prev.frame));
+  return{angle:lerpAng(prev.angle,next.angle,t),x:lerp(prev.x,next.x,t),y:lerp(prev.y,next.y,t)};
+}
+
+// setInterp -- set a transform property at current frame (creates keyframe if animating)
+function setInterp(prop,val){
+  const b=getBone(S.selBone);if(!b)return;
+  pushUndo();
+  if(S.anim){
+    let kf=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
+    if(!kf){const cur=interpBone(b.id,S.frame);kf={frame:S.frame,boneId:b.id,...cur};S.anim.keyframes.push(kf);}
+    kf[prop]=val;
+  }else{b[prop]=val;}
+  renderVP();renderTL();
+}
+
+// -- VIEWPORT ------------------------------------
+const vpC=$('#vp'), vpX=vpC.getContext('2d');
+
+function resizeVP(){
+  const w=$('#vp-wrap');
+  vpC.width=w.clientWidth;vpC.height=w.clientHeight;
+  renderVP();
+}
+
+const w2s=(wx,wy)=>({sx:wx*S.vp.zoom+S.vp.x, sy:wy*S.vp.zoom+S.vp.y});
+const s2w=(sx,sy)=>({wx:(sx-S.vp.x)/S.vp.zoom, wy:(sy-S.vp.y)/S.vp.zoom});
+
+function renderVP(){
+  const W=vpC.width,H=vpC.height;
+  vpX.clearRect(0,0,W,H);
+  const{x,y,zoom}=S.vp;
+
+  // grid
+  vpX.strokeStyle='#1a1a26';vpX.lineWidth=1;
+  const step=zoom>=4?16:64;
+  const wx0=(0-x)/zoom,wy0=(0-y)/zoom;
+  for(let gx=Math.floor(wx0/step)*step;gx<(W-x)/zoom;gx+=step){const s=w2s(gx,0);vpX.beginPath();vpX.moveTo(s.sx,0);vpX.lineTo(s.sx,H);vpX.stroke();}
+  for(let gy=Math.floor(wy0/step)*step;gy<(H-y)/zoom;gy+=step){const s=w2s(0,gy);vpX.beginPath();vpX.moveTo(0,s.sy);vpX.lineTo(W,s.sy);vpX.stroke();}
+  // origin cross
+  const o=w2s(0,0);
+  vpX.strokeStyle='#2a2a3c';
+  vpX.beginPath();vpX.moveTo(o.sx-10,o.sy);vpX.lineTo(o.sx+10,o.sy);vpX.stroke();
+  vpX.beginPath();vpX.moveTo(o.sx,o.sy-10);vpX.lineTo(o.sx,o.sy+10);vpX.stroke();
+
+  vpX.imageSmoothingEnabled=false;
+  const frame=S.frame;
+
+  // -- Onion skinning --
+  if(S.onion && S.anim){
+    const onionFrames=[];
+    if(frame>0) onionFrames.push({f:frame-1,col:'#4060ff',alpha:.25});
+    if(frame<S.anim.frameCount-1) onionFrames.push({f:frame+1,col:'#ff4040',alpha:.25});
+    onionFrames.forEach(({f,col,alpha})=>{
+      S.bones.filter(b=>b.spriteId!=null).forEach(bone=>{
+        const sp=S.sprites.find(s=>s.id===bone.spriteId);if(!sp)return;
+        const{wx,wy,wa}=boneWT(bone,f);
+        const s0=w2s(wx,wy);
+        const pvX=bone.pivotX??sp.trimW/2, pvY=bone.pivotY??sp.trimH/2;
+        vpX.save();
+        vpX.globalAlpha=alpha;
+        vpX.imageSmoothingEnabled=false;
+        vpX.translate(s0.sx,s0.sy);vpX.rotate(deg2rad(wa));
+        vpX.imageSmoothingEnabled=false;
+        // tinted silhouette
+        vpX.drawImage(sp.img,sp.trimX,sp.trimY,sp.trimW,sp.trimH,
+          -pvX*zoom,-pvY*zoom,sp.trimW*zoom,sp.trimH*zoom);
+        // colour overlay
+        vpX.fillStyle=col;
+        vpX.globalCompositeOperation='source-atop';
+        vpX.fillRect(-pvX*zoom,-pvY*zoom,sp.trimW*zoom,sp.trimH*zoom);
+        vpX.globalCompositeOperation='source-over';
+        vpX.restore();
+        vpX.imageSmoothingEnabled=false;
+      });
+    });
+  }
+
+  // -- Draw sprites (back to front = bone array order) --
+  S.bones.filter(b=>b.spriteId!=null).forEach(bone=>{
+    const sp=S.sprites.find(s=>s.id===bone.spriteId);if(!sp)return;
+    const{wx,wy,wa}=boneWT(bone,frame);
+    const s0=w2s(wx,wy);
+    const isSel=bone.id===S.selBone;
+    // Pivot = where bone root is on the sprite (in sprite-local pixels)
+    const pvX=bone.pivotX??sp.trimW/2;
+    const pvY=bone.pivotY??sp.trimH/2;
+
+    vpX.save();
+    vpX.imageSmoothingEnabled=false;
+    vpX.translate(s0.sx,s0.sy);
+    vpX.rotate(deg2rad(wa));
+    vpX.imageSmoothingEnabled=false;
+
+    // sprite drawn so that pivot aligns with (0,0) = bone root
+    vpX.drawImage(sp.img,sp.trimX,sp.trimY,sp.trimW,sp.trimH,
+      -pvX*zoom,-pvY*zoom,sp.trimW*zoom,sp.trimH*zoom);
+
+    // selection outline
+    if(isSel){
+      vpX.strokeStyle='rgba(64,144,232,0.5)';vpX.lineWidth=1;
+      vpX.setLineDash([3,3]);
+      vpX.strokeRect(-pvX*zoom,-pvY*zoom,sp.trimW*zoom,sp.trimH*zoom);
+      vpX.setLineDash([]);
+    }
+    vpX.restore();
+    vpX.imageSmoothingEnabled=false; // restore() resets imageSmoothingEnabled to true
+  });
+
+  // -- Draw bones --
+  S.bones.forEach(bone=>{
+    const{wx,wy,wa}=boneWT(bone,frame);
+    const tip=boneTip(bone,frame);
+    const s0=w2s(wx,wy),s1=w2s(tip.x,tip.y);
+    const isSel=bone.id===S.selBone;
+    const col=isSel?'#ffe080':'#b08020';
+
+    // diamond body
+    vpX.save();
+    vpX.globalAlpha=isSel?1:.8;
+    const ang=Math.atan2(s1.sy-s0.sy,s1.sx-s0.sx);
+    const len=Math.hypot(s1.sx-s0.sx,s1.sy-s0.sy);
+    const w2=Math.max(3,len*.11);
+    vpX.translate(s0.sx,s0.sy);vpX.rotate(ang);
+    vpX.beginPath();vpX.moveTo(0,0);vpX.lineTo(w2,-w2*.5);vpX.lineTo(len,0);vpX.lineTo(w2,w2*.5);vpX.closePath();
+    vpX.fillStyle=col+'33';vpX.fill();
+    vpX.strokeStyle=col;vpX.lineWidth=isSel?1.5:1;vpX.stroke();
+    vpX.restore();
+
+    // root circle -- bigger hit target, filled
+    const rootR=isSel?7:4;
+    vpX.beginPath();vpX.arc(s0.sx,s0.sy,rootR,0,Math.PI*2);
+    vpX.fillStyle=col;vpX.fill();
+    if(isSel){
+      vpX.strokeStyle='#fff4';vpX.lineWidth=1;
+      vpX.beginPath();vpX.arc(s0.sx,s0.sy,rootR+2,0,Math.PI*2);vpX.stroke();
+    }
+
+    // tip -- arrowhead + larger hit area when selected
+    const tipR=isSel?6:3;
+    vpX.beginPath();vpX.arc(s1.sx,s1.sy,tipR,0,Math.PI*2);
+    vpX.fillStyle=isSel?col:'#0000';
+    if(isSel)vpX.fill();
+    vpX.strokeStyle=col;vpX.lineWidth=isSel?2:1;
+    vpX.stroke();
+    // small triangle pointing in bone direction
+    if(isSel){
+      vpX.save();vpX.translate(s1.sx,s1.sy);vpX.rotate(ang);
+      vpX.beginPath();vpX.moveTo(tipR,0);vpX.lineTo(-tipR*.6,-tipR*.5);vpX.lineTo(-tipR*.6,tipR*.5);vpX.closePath();
+      vpX.fillStyle=col;vpX.fill();vpX.restore();
+      // label "drag to rotate"
+      vpX.fillStyle=col+'99';vpX.font='8px monospace';
+      vpX.fillText('↻',s1.sx+tipR+2,s1.sy+3);
+    }
+
+    // label
+    if(isSel||zoom>=2){
+      vpX.fillStyle=col;vpX.font='9px monospace';
+      vpX.fillText(bone.name,s0.sx+rootR+3,s0.sy-rootR);
+    }
+
+    // attachment point indicator (when bone has sprite & is selected)
+    if(isSel&&bone.spriteId!=null){
+      vpX.save();
+      vpX.translate(s0.sx,s0.sy);
+      const R=8;
+      vpX.strokeStyle='#40c8ff';
+      vpX.lineWidth=1.5;
+      vpX.beginPath();vpX.arc(0,0,R,0,Math.PI*2);vpX.stroke();
+      vpX.fillStyle='#40c8ff22';vpX.fill();
+      vpX.beginPath();vpX.moveTo(-R*1.6,0);vpX.lineTo(R*1.6,0);vpX.moveTo(0,-R*1.6);vpX.lineTo(0,R*1.6);vpX.stroke();
+      vpX.fillStyle='#40c8ff';vpX.font='8px monospace';
+      vpX.fillText('attach',R+3,-3);
+      vpX.restore();
+    }
+  });
+
+  // -- Bone draft preview (while drawing in B mode) --
+  if(S.boneDraft){
+    const{bone,startWX,startWY}=S.boneDraft;
+    const s0=w2s(startWX,startWY);
+    const tip=boneTip(bone,S.frame);
+    const s1=w2s(tip.x,tip.y);
+    // pulsing dashed line to show it's in-progress
+    vpX.save();
+    vpX.setLineDash([4,3]);
+    vpX.strokeStyle='#ffe08088';vpX.lineWidth=1.5;
+    vpX.beginPath();vpX.moveTo(s0.sx,s0.sy);vpX.lineTo(s1.sx,s1.sy);vpX.stroke();
+    vpX.setLineDash([]);
+    // start dot
+    vpX.beginPath();vpX.arc(s0.sx,s0.sy,5,0,Math.PI*2);
+    vpX.fillStyle='#ffe080';vpX.fill();
+    // end dot
+    vpX.beginPath();vpX.arc(s1.sx,s1.sy,4,0,Math.PI*2);
+    vpX.strokeStyle='#ffe080';vpX.lineWidth=2;vpX.stroke();
+    // length label near midpoint
+    const mx=(s0.sx+s1.sx)/2, my=(s0.sy+s1.sy)/2;
+    vpX.fillStyle='#ffe080';vpX.font='bold 10px monospace';
+    vpX.fillText(`${bone.length.toFixed(0)}px`,mx+6,my-4);
+    vpX.restore();
+  }
+
+  // frame display
+  $('#vp-f').textContent=frame;
+  $('#vp-ft').textContent=S.anim?S.anim.frameCount-1:0;
+}
+
+// -- PIVOT INSPECTOR -----------------------------
+// Two handles on the sprite:
+//   START ⊕ (cyan)  -- pivotX/Y -- where bone root attaches to sprite
+//   END   ◎ (yellow) -- sets bone length (distance START->END in sprite pixels)
+// bone.angle is NOT touched here. In viewport only rotation is allowed.
+const piOverlay=$('#pi-overlay');
+const piCanvas=$('#pi-canvas');
+const piCtx=piCanvas.getContext('2d');
+let piState=null;
+S.pivotInspectorOpen=false;
+
+const PI_HANDLE_R=8;
+const PI_MARGIN=48; // extra canvas space around sprite so END can go outside
+
+function openPivotInspector(bone){
+  const sp=S.sprites.find(s=>s.id===bone.spriteId);
+  if(!sp){setstatus('Assign a sprite to this bone first');return;}
+  const pivX=bone.pivotX??sp.trimW/2;
+  const pivY=bone.pivotY??sp.trimH/2;
+  // Restore END from saved tipDX/tipDY -- don't reset to default every time
+  const endX=pivX+(bone.tipDX??bone.length);
+  const endY=pivY+(bone.tipDY??0);
+  piState={bone,sp,pivX,pivY,endX,endY,dragging:null,
+    offX:PI_MARGIN, offY:PI_MARGIN,
+    canvW:sp.trimW+PI_MARGIN*2, canvH:sp.trimH+PI_MARGIN*2};
+  S.pivotInspectorOpen=true;
+  piCanvas.width =piState.canvW*PI_ZOOM;
+  piCanvas.height=piState.canvH*PI_ZOOM;
+  piCtx.imageSmoothingEnabled=false;
+  drawPivotInspector();
+  piOverlay.classList.add('show');
+  setstatus('Drag ⊕ START to set attachment point * Drag ◎ END to set bone length');
+}
+
+function sp2c(x,y){const{offX,offY}=piState;return{cx:(x+offX)*PI_ZOOM,cy:(y+offY)*PI_ZOOM};}
+function c2sp(cx,cy){const{offX,offY}=piState;return{x:cx/PI_ZOOM-offX,y:cy/PI_ZOOM-offY};}
+
+function drawPivotInspector(){
+  if(!piState)return;
+  const{sp,pivX,pivY,endX,endY,canvW,canvH,offX,offY}=piState;
+  const W=canvW*PI_ZOOM,H=canvH*PI_ZOOM;
+  piCtx.clearRect(0,0,W,H);
+  piCtx.fillStyle='#080810';piCtx.fillRect(0,0,W,H);
+
+  // sprite area checkerboard
+  const spX=offX*PI_ZOOM,spY=offY*PI_ZOOM,spW=sp.trimW*PI_ZOOM,spH=sp.trimH*PI_ZOOM;
+  for(let r=0;r<sp.trimH;r++)for(let c=0;c<sp.trimW;c++){
+    piCtx.fillStyle=(r+c)%2===0?'#1e1e2a':'#141420';
+    piCtx.fillRect(spX+c*PI_ZOOM,spY+r*PI_ZOOM,PI_ZOOM,PI_ZOOM);
+  }
+  piCtx.imageSmoothingEnabled=false;
+  piCtx.drawImage(sp.img,sp.trimX,sp.trimY,sp.trimW,sp.trimH,spX,spY,spW,spH);
+  piCtx.strokeStyle='#3a3a5a';piCtx.lineWidth=1;
+  piCtx.strokeRect(spX+.5,spY+.5,spW-1,spH-1);
+  // pixel grid
+  piCtx.strokeStyle='rgba(255,255,255,0.04)';piCtx.lineWidth=1;
+  for(let c=1;c<sp.trimW;c++){const x=spX+c*PI_ZOOM;piCtx.beginPath();piCtx.moveTo(x,spY);piCtx.lineTo(x,spY+spH);piCtx.stroke();}
+  for(let r=1;r<sp.trimH;r++){const y=spY+r*PI_ZOOM;piCtx.beginPath();piCtx.moveTo(spX,y);piCtx.lineTo(spX+spW,y);piCtx.stroke();}
+
+  const{cx:sx,cy:sy}=sp2c(pivX,pivY);
+  const{cx:ex,cy:ey}=sp2c(endX,endY);
+  const len=Math.hypot(ex-sx,ey-sy);
+
+  // bone line
+  piCtx.strokeStyle='#ffe08088';piCtx.lineWidth=2;
+  piCtx.beginPath();piCtx.moveTo(sx,sy);piCtx.lineTo(ex,ey);piCtx.stroke();
+  // arrowhead
+  if(len>6){
+    const ang=Math.atan2(ey-sy,ex-sx);
+    piCtx.save();piCtx.translate(ex,ey);piCtx.rotate(ang);
+    piCtx.fillStyle='#ffe080bb';
+    piCtx.beginPath();piCtx.moveTo(8,0);piCtx.lineTo(-6,-4);piCtx.lineTo(-6,4);piCtx.closePath();piCtx.fill();
+    piCtx.restore();
+  }
+  // length label
+  piCtx.fillStyle='#ffe080';piCtx.font='bold 11px monospace';
+  piCtx.fillText(`${(len/PI_ZOOM).toFixed(0)}px`,(sx+ex)/2+6,(sy+ey)/2-6);
+
+  // START handle (cyan)
+  const dsS=piState.dragging==='start';
+  piCtx.strokeStyle=dsS?'#80f0ff':'#40c8ff';piCtx.lineWidth=2;
+  piCtx.beginPath();piCtx.arc(sx,sy,PI_HANDLE_R,0,Math.PI*2);
+  piCtx.fillStyle=dsS?'#40c8ff55':'#40c8ff22';piCtx.fill();piCtx.stroke();
+  piCtx.beginPath();piCtx.moveTo(sx-PI_HANDLE_R*1.7,sy);piCtx.lineTo(sx+PI_HANDLE_R*1.7,sy);
+  piCtx.moveTo(sx,sy-PI_HANDLE_R*1.7);piCtx.lineTo(sx,sy+PI_HANDLE_R*1.7);piCtx.stroke();
+  piCtx.fillStyle='#40c8ff';piCtx.font='bold 10px monospace';
+  piCtx.fillText(`⊕ START (${pivX.toFixed(0)},${pivY.toFixed(0)})`,sx+PI_HANDLE_R+4,sy-PI_HANDLE_R-3);
+
+  // END handle (yellow)
+  const dsE=piState.dragging==='end';
+  piCtx.strokeStyle=dsE?'#fff4a0':'#ffe080';piCtx.lineWidth=2;
+  piCtx.beginPath();piCtx.arc(ex,ey,PI_HANDLE_R,0,Math.PI*2);
+  piCtx.fillStyle=dsE?'#ffe08055':'#ffe08022';piCtx.fill();piCtx.stroke();
+  piCtx.beginPath();piCtx.arc(ex,ey,PI_HANDLE_R*0.4,0,Math.PI*2);piCtx.stroke();
+  piCtx.fillStyle='#ffe080';piCtx.font='bold 10px monospace';
+  piCtx.fillText(`◎ END (${endX.toFixed(0)},${endY.toFixed(0)})`,ex+PI_HANDLE_R+4,ey+PI_HANDLE_R+14);
+}
+
+function piCanvasCoords(e){
+  const rect=piCanvas.getBoundingClientRect();
+  return{cx:(e.clientX-rect.left)*(piCanvas.width/rect.width),
+         cy:(e.clientY-rect.top)*(piCanvas.height/rect.height)};
+}
+
+piCanvas.addEventListener('mousedown',e=>{
+  if(!piState)return;
+  const{cx,cy}=piCanvasCoords(e);
+  const{cx:sx,cy:sy}=sp2c(piState.pivX,piState.pivY);
+  const{cx:ex,cy:ey}=sp2c(piState.endX,piState.endY);
+  if(Math.hypot(cx-sx,cy-sy)<=PI_HANDLE_R+6)      piState.dragging='start';
+  else if(Math.hypot(cx-ex,cy-ey)<=PI_HANDLE_R+6) piState.dragging='end';
+  else piState.dragging=null;
+  drawPivotInspector();
+});
+
+piCanvas.addEventListener('mousemove',e=>{
+  if(!(e.buttons&1)||!piState||!piState.dragging)return;
+  const{cx,cy}=piCanvasCoords(e);
+  const{x,y}=c2sp(cx,cy);
+  if(piState.dragging==='start'){
+    piState.pivX=clamp(x,0,piState.sp.trimW);
+    piState.pivY=clamp(y,0,piState.sp.trimH);
+  }else{
+    // END can go outside sprite bounds -- bone can be longer than sprite
+    piState.endX=x;
+    piState.endY=y;
+  }
+  drawPivotInspector();
+});
+
+piCanvas.addEventListener('mouseup',()=>{if(piState)piState.dragging=null;});
+
+$('#pi-ok').onclick=()=>{
+  if(!piState)return;
+  const{bone,pivX,pivY,endX,endY}=piState;
+  // Save pivot (attachment point)
+  bone.pivotX=pivX;
+  bone.pivotY=pivY;
+  // Save tip offset in sprite-local pixels (from pivot to end).
+  // bone.angle is NOT changed -- sprite stays exactly as it was.
+  // boneWorldTip() uses these offsets rotated by wa to find tip in world space.
+  bone.tipDX=endX-pivX;
+  bone.tipDY=endY-pivY;
+  bone.length=Math.max(1,Math.hypot(bone.tipDX,bone.tipDY));
+  piOverlay.classList.remove('show');
+  S.pivotInspectorOpen=false;
+  renderVP();renderProps();renderTL();
+  setstatus(`Pivot (${pivX.toFixed(0)},${pivY.toFixed(0)}) tip offset (${bone.tipDX.toFixed(0)},${bone.tipDY.toFixed(0)}) -- drag tip in viewport to rotate`);
+  piState=null;
+};
+$('#pi-cancel').onclick=()=>{piOverlay.classList.remove('show');S.pivotInspectorOpen=false;piState=null;};
+$('#pi-center').onclick=()=>{
+  if(!piState)return;
+  piState.pivX=piState.sp.trimW/2;piState.pivY=piState.sp.trimH/2;drawPivotInspector();
+};
+
+// -- SPRITE LIST ---------------------------------
+function renderSpriteList(){
+  const wrap=$('#sprite-list');wrap.innerHTML='';
+  S.sprites.forEach(sp=>{
+    const tc=document.createElement('canvas');tc.width=24;tc.height=24;
+    const tx=tc.getContext('2d');tx.imageSmoothingEnabled=false;
+    const sc=Math.min(24/sp.trimW,24/sp.trimH);
+    const dw=sp.trimW*sc,dh=sp.trimH*sc;
+    tx.drawImage(sp.img,sp.trimX,sp.trimY,sp.trimW,sp.trimH,(24-dw)/2,(24-dh)/2,dw,dh);
+    const div=document.createElement('div');
+    div.className='spr';div.dataset.id=sp.id;
+    div.innerHTML=`<div class="spr-info"><div class="spr-name">${sp.name}</div><div class="spr-dim">${sp.trimW}×${sp.trimH}</div></div><div class="spr-btns"><button class="sp-u">↑</button><button class="sp-d">↓</button><button class="sp-x danger">✕</button></div>`;
+    div.insertBefore(tc,div.firstChild);
+    div.addEventListener('click',e=>{
+      if(e.target.closest('.spr-btns'))return;
+      // assign to selected bone
+      const bone=getBone(S.selBone);
+      if(bone){
+        bone.spriteId=sp.id;
+        if(bone.pivotX==null){bone.pivotX=sp.trimW/2;bone.pivotY=sp.trimH/2;}
+        renderBoneTree();renderProps();renderVP();
+        setstatus(`Sprite "${sp.name}" attached to "${bone.name}" -- click ⊕ Set Attachment Point to position it`);
+      }else setstatus('Select a bone first, then click a sprite to attach it');
+    });
+    div.querySelector('.sp-u').onclick=e=>{e.stopPropagation();const i=S.sprites.indexOf(sp);if(i>0){S.sprites.splice(i,1);S.sprites.splice(i-1,0,sp);renderSpriteList();renderVP();}};
+    div.querySelector('.sp-d').onclick=e=>{e.stopPropagation();const i=S.sprites.indexOf(sp);if(i<S.sprites.length-1){S.sprites.splice(i,1);S.sprites.splice(i+1,0,sp);renderSpriteList();renderVP();}};
+    div.querySelector('.sp-x').onclick=e=>{e.stopPropagation();S.sprites=S.sprites.filter(s=>s!==sp);S.bones.forEach(b=>{if(b.spriteId===sp.id)b.spriteId=null;});renderSpriteList();renderVP();};
+    wrap.appendChild(div);
+  });
+}
+
+// -- BONE TREE -----------------------------------
+function renderBoneTree(){
+  const wrap=$('#bone-tree');wrap.innerHTML='';
+  function node(bone,depth){
+    const div=document.createElement('div');
+    div.className='bn'+(bone.id===S.selBone?' sel':'');
+    div.dataset.id=bone.id;div.draggable=true;
+    const ind='<span style="display:inline-block;width:12px"></span>'.repeat(depth);
+    div.innerHTML=`${ind}<span class="bn-dot${bone.spriteId!=null?' sp':''}"></span><span class="bn-lbl">${bone.name}</span>`;
+    div.addEventListener('click',()=>{S.selBone=bone.id;renderBoneTree();renderProps();renderVP();});
+    div.addEventListener('dblclick',e=>{
+      e.stopPropagation();
+      // inline rename
+      const lbl=div.querySelector('.bn-lbl');
+      const inp=document.createElement('input');
+      inp.type='text';inp.value=bone.name;
+      inp.style.cssText='font:inherit;background:var(--panel2);color:var(--text);border:1px solid var(--accent);width:100px;padding:1px 4px;border-radius:2px;';
+      lbl.replaceWith(inp);inp.focus();inp.select();
+      const commit=()=>{
+        const v=inp.value.trim()||bone.name;
+        bone.name=v;renderBoneTree();renderProps();renderZOrder();
+      };
+      inp.addEventListener('blur',commit);
+      inp.addEventListener('keydown',e2=>{
+        if(e2.key==='Enter'){inp.blur();}
+        if(e2.key==='Escape'){inp.value=bone.name;inp.blur();}
+        e2.stopPropagation();
+      });
+    });
+    div.addEventListener('dragstart',e=>e.dataTransfer.setData('bid',bone.id));
+    div.addEventListener('dragover',e=>{e.preventDefault();div.classList.add('dragover');});
+    div.addEventListener('dragleave',()=>div.classList.remove('dragover'));
+    div.addEventListener('drop',e=>{
+      e.preventDefault();div.classList.remove('dragover');
+      const did=parseInt(e.dataTransfer.getData('bid'));
+      if(did===bone.id)return;
+      let cur=bone.id;while(cur!=null){if(cur===did)return;cur=getBone(cur)?.parentId??null;}
+      getBone(did).parentId=bone.id;renderBoneTree();renderVP();
+    });
+    wrap.appendChild(div);
+    S.bones.filter(b=>b.parentId===bone.id).forEach(ch=>node(ch,depth+1));
+  }
+  S.bones.filter(b=>b.parentId==null).forEach(b=>node(b,0));
+}
+
+// -- PROPS PANEL ---------------------------------
+function renderProps(){
+  const body=$('#props-body');body.innerHTML='';
+  const bone=getBone(S.selBone);
+  if(!bone){body.innerHTML='<div style="color:var(--dim);font-size:10px;padding:2px">Select a bone</div>';return;}
+  const ip=S.anim?interpBone(bone.id,S.frame):{angle:bone.angle,x:bone.x,y:bone.y};
+  const sp=bone.spriteId!=null?S.sprites.find(s=>s.id===bone.spriteId):null;
+  const pvX=(bone.pivotX??(sp?sp.trimW/2:0)).toFixed(1);
+  const pvY=(bone.pivotY??(sp?sp.trimH/2:0)).toFixed(1);
+  const isChild=bone.parentId!=null;
+
+  body.innerHTML=`
+  <div class="pr"><label>Name</label><input id="p-nm" type="text" value="${bone.name}"></div>
+  <div class="pr"><label>Length</label><input id="p-ln" type="number" value="${bone.length.toFixed(1)}" min="1" title="Bone length in pixels"></div>
+
+  <div style="border-top:1px solid var(--border);padding-top:4px;font-size:9px;color:var(--dim);letter-spacing:1px;">TRANSFORM${isChild?' (local -- relative to parent tip)':' (world)'}</div>
+  ${isChild?'':`<div class="pr"><label>X</label><input id="p-x" type="number" value="${ip.x.toFixed(1)}"><label style="margin-left:4px">Y</label><input id="p-y" type="number" value="${ip.y.toFixed(1)}"></div>`}
+  <div class="pr"><label>Angle</label><input id="p-a" type="number" value="${ip.angle.toFixed(1)}" style="width:58px"><span style="color:var(--dim)">°</span></div>
+
+  <div style="border-top:1px solid var(--border);padding-top:4px;font-size:9px;color:var(--dim);letter-spacing:1px;">SPRITE</div>
+  <div class="pr"><label>Sprite</label><select id="p-sp" style="width:110px">
+    <option value="">-- none --</option>
+    ${S.sprites.map(s=>`<option value="${s.id}"${bone.spriteId===s.id?' selected':''}>${s.name}</option>`).join('')}
+  </select></div>
+
+  ${sp?`<div class="pivot-box">
+    <div class="pivot-box-title">⊕ Attachment point -- (${pvX}, ${pvY}) px</div>
+    <div class="pivot-box-hint">The pixel on the sprite where<br>this bone is "pinned".</div>
+    <button id="btn-set-pivot">🖊 Set on sprite...</button>
+  </div>`:'<div style="font-size:9px;color:var(--dim)">Assign a sprite above, then set where the bone attaches to it.</div>'}
+
+  <div class="pr" style="gap:4px;margin-top:2px;">
+    <button id="p-child">+ Child bone</button>
+    <button id="p-del" class="danger">✕ Delete</button>
+  </div>`;
+
+  $('#p-nm').oninput=e=>{bone.name=e.target.value;renderBoneTree();};
+  $('#p-ln').oninput=e=>{bone.length=Math.max(1,+e.target.value);renderVP();};
+  if(!isChild){
+    $('#p-x').oninput=e=>setInterp('x',+e.target.value);
+    $('#p-y').oninput=e=>setInterp('y',+e.target.value);
+  }
+  $('#p-a').oninput=e=>setInterp('angle',+e.target.value);
+  $('#p-sp').onchange=e=>{
+    bone.spriteId=e.target.value?parseInt(e.target.value):null;
+    if(bone.spriteId!=null){
+      const s=S.sprites.find(sp2=>sp2.id===bone.spriteId);
+      if(s&&bone.pivotX==null){bone.pivotX=s.trimW/2;bone.pivotY=s.trimH/2;}
+    }
+    renderBoneTree();renderVP();renderProps();
+  };
+  if(sp){$('#btn-set-pivot').onclick=()=>openPivotInspector(bone);}
+  $('#p-child').onclick=()=>addBone(bone.id);
+  $('#p-del').onclick=()=>deleteBone(bone.id);
+}
+
+// -- BONE OPS ------------------------------------
+function addBone(parentId=null){
+  pushUndo();
+  const bone={id:uid(),name:`bone${S.bones.length+1}`,parentId,length:40,angle:0,
+    x:0,y:0,spriteId:null,pivotX:null,pivotY:null,tipDX:40,tipDY:0};
+  S.bones.push(bone);S.selBone=bone.id;
+  renderBoneTree();renderProps();renderVP();renderTL();renderZOrder();
+  setstatus(`Bone "${bone.name}" added -- now attach a sprite from the panel`);
+}
+
+function deleteBone(id){
+  pushUndo();
+  const del=[id];let changed=true;
+  while(changed){changed=false;S.bones.forEach(b=>{if(b.parentId!=null&&del.includes(b.parentId)&&!del.includes(b.id)){del.push(b.id);changed=true;}});}
+  S.bones=S.bones.filter(b=>!del.includes(b.id));
+  if(S.anim)S.anim.keyframes=S.anim.keyframes.filter(k=>!del.includes(k.boneId));
+  if(del.includes(S.selBone))S.selBone=null;
+  renderBoneTree();renderProps();renderVP();renderTL();renderZOrder();
+}
+
+function renderAnimThumb(anim){
+  const TW=48,TH=36;
+  const tc=document.createElement('canvas');tc.width=TW;tc.height=TH;tc.className='ai-thumb';
+  const tx=tc.getContext('2d');
+  tx.fillStyle='#080810';tx.fillRect(0,0,TW,TH);
+  if(!S.bones.some(b=>b.spriteId!=null)){return tc;}
+
+  // Find bounds at frame 0 of this animation
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  const tmpAnim=S.anim; S.anim=anim;
+  S.bones.filter(b=>b.spriteId!=null).forEach(bone=>{
+    const sp=S.sprites.find(s=>s.id===bone.spriteId);if(!sp)return;
+    const{wx,wy,wa}=boneWT(bone,0);const r=deg2rad(wa);
+    const pvX=bone.pivotX??sp.trimW/2,pvY=bone.pivotY??sp.trimH/2;
+    [[0,0],[sp.trimW,0],[sp.trimW,sp.trimH],[0,sp.trimH]].forEach(([cx,cy])=>{
+      const lx=cx-pvX,ly=cy-pvY;
+      const gx=wx+Math.cos(r)*lx-Math.sin(r)*ly;
+      const gy=wy+Math.sin(r)*lx+Math.cos(r)*ly;
+      if(gx<minX)minX=gx;if(gx>maxX)maxX=gx;if(gy<minY)minY=gy;if(gy>maxY)maxY=gy;
+    });
+  });
+  if(!isFinite(minX)){S.anim=tmpAnim;return tc;}
+  const W=maxX-minX||1,H=maxY-minY||1;
+  const zoom=Math.min(TW/W,TH/H)*0.9;
+  const offX=(TW-W*zoom)/2-minX*zoom;
+  const offY=(TH-H*zoom)/2-minY*zoom;
+
+  tx.imageSmoothingEnabled=false;
+  S.bones.filter(b=>b.spriteId!=null).forEach(bone=>{
+    const sp=S.sprites.find(s=>s.id===bone.spriteId);if(!sp)return;
+    const{wx,wy,wa}=boneWT(bone,0);
+    const pvX=bone.pivotX??sp.trimW/2,pvY=bone.pivotY??sp.trimH/2;
+    tx.save();tx.imageSmoothingEnabled=false;
+    tx.translate(wx*zoom+offX,wy*zoom+offY);tx.rotate(deg2rad(wa));
+    tx.imageSmoothingEnabled=false;
+    tx.drawImage(sp.img,sp.trimX,sp.trimY,sp.trimW,sp.trimH,-pvX*zoom,-pvY*zoom,sp.trimW*zoom,sp.trimH*zoom);
+    tx.restore();tx.imageSmoothingEnabled=false;
+  });
+  S.anim=tmpAnim;
+  return tc;
+}
+
+// -- ANIM LIST -----------------------------------
+function renderAnimList(){
+  const wrap=$('#anim-list');wrap.innerHTML='';
+  S.anims.forEach(a=>{
+    const div=document.createElement('div');div.className='ai'+(a===S.anim?' sel':'');
+    // thumbnail
+    const thumb=renderAnimThumb(a);
+    div.appendChild(thumb);
+    // info
+    const info=document.createElement('div');info.className='ai-info';
+    const nm=document.createElement('div');nm.className='ai-name';nm.textContent=a.name;
+    const fr=document.createElement('div');fr.className='ai-frames';fr.textContent=`${a.frameCount}f`;
+    info.appendChild(nm);info.appendChild(fr);
+    div.appendChild(info);
+    // play dot
+    const dot=document.createElement('span');dot.className='ai-dot'+(S.playing&&a===S.anim?' play':'');
+    div.appendChild(dot);
+    div.addEventListener('click',()=>{stopPlay();S.anim=a;S.frame=0;syncAnimCfg();renderAnimList();renderTL();renderVP();renderProps();});
+    div.addEventListener('dblclick',e=>{
+      e.stopPropagation();
+      const inp=document.createElement('input');
+      inp.type='text';inp.value=a.name;
+      inp.style.cssText='font:inherit;background:var(--panel2);color:var(--text);border:1px solid var(--accent);width:90px;padding:1px 4px;border-radius:2px;';
+      nm.replaceWith(inp);inp.focus();inp.select();
+      const commit=()=>{
+        const v=inp.value.trim()||a.name;
+        a.name=v;syncAnimCfg();renderAnimList();
+      };
+      inp.addEventListener('blur',commit);
+      inp.addEventListener('keydown',e2=>{
+        if(e2.key==='Enter')inp.blur();
+        if(e2.key==='Escape'){inp.value=a.name;inp.blur();}
+        e2.stopPropagation();
+      });
+    });
+    wrap.appendChild(div);
+  });
+}
+
+// -- Z-ORDER PANEL -------------------------------
+function renderZOrder(){
+  const wrap=$('#zorder-list');wrap.innerHTML='';
+  S.bones.forEach((bone,i)=>{
+    const div=document.createElement('div');
+    div.className='zo'+(bone.id===S.selBone?' sel':'');
+    const hasSp=bone.spriteId!=null;
+    div.innerHTML=`<span class="zo-num">${i+1}</span><span class="zo-dot${hasSp?' sp':''}"></span><span class="zo-name">${bone.name}</span><span class="zo-btns"><button class="zo-up" title="Move up (renders below)">↑</button><button class="zo-dn" title="Move down (renders above)">↓</button></span>`;
+    div.querySelector('.zo-up').onclick=e=>{
+      e.stopPropagation();
+      if(i>0){[S.bones[i-1],S.bones[i]]=[S.bones[i],S.bones[i-1]];renderZOrder();renderBoneTree();renderVP();}
+    };
+    div.querySelector('.zo-dn').onclick=e=>{
+      e.stopPropagation();
+      if(i<S.bones.length-1){[S.bones[i+1],S.bones[i]]=[S.bones[i],S.bones[i+1]];renderZOrder();renderBoneTree();renderVP();}
+    };
+    div.addEventListener('click',()=>{S.selBone=bone.id;renderBoneTree();renderZOrder();renderProps();renderVP();});
+    wrap.appendChild(div);
+  });
+}
+
+// -- SAVE PROJECT --------------------------------
+async function saveProject(){
+  // Sprites: convert img to base64 PNG
+  const spritesData=await Promise.all(S.sprites.map(async sp=>{
+    const c=document.createElement('canvas');
+    c.width=sp.img.naturalWidth||sp.img.width;
+    c.height=sp.img.naturalHeight||sp.img.height;
+    const x=c.getContext('2d');x.drawImage(sp.img,0,0);
+    const b64=c.toDataURL('image/png').split(',')[1];
+    return{id:sp.id,name:sp.name,b64,trimX:sp.trimX,trimY:sp.trimY,trimW:sp.trimW,trimH:sp.trimH};
+  }));
+
+  const proj={
+    version:1,
+    nextId:_id,
+    sprites:spritesData,
+    bones:S.bones.map(b=>({...b})),
+    anims:S.anims.map(a=>({...a,keyframes:[...a.keyframes]})),
+    currentAnimId:S.anim?.id??null,
+  };
+  const blob=new Blob([JSON.stringify(proj,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='bone-forge-project.json';a.click();
+  setstatus('Project saved -> bone-forge-project.json');
+}
+
+// -- LOAD PROJECT --------------------------------
+async function loadProject(file){
+  const text=await file.text();
+  let proj;
+  try{proj=JSON.parse(text);}catch(e){setstatus('Error: invalid JSON');return;}
+  if(!proj.version||!proj.sprites||!proj.bones){setstatus('Error: not a Bone Forge project');return;}
+
+  setstatus('Loading sprites...');
+  // Load sprite images from base64
+  const loadedSprites=await Promise.all(proj.sprites.map(sd=>new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>res({id:sd.id,name:sd.name,img,trimX:sd.trimX,trimY:sd.trimY,trimW:sd.trimW,trimH:sd.trimH});
+    img.src='data:image/png;base64,'+sd.b64;
+  })));
+
+  // Restore state
+  _id=proj.nextId??(_id);
+  S.sprites=loadedSprites;
+  S.bones=proj.bones;
+  S.anims=proj.anims;
+  S.anim=S.anims.find(a=>a.id===proj.currentAnimId)??S.anims[0]??null;
+  S.frame=0;S.selBone=null;S.drag=null;S.ikDrag=null;S.boneDraft=null;
+
+  syncAnimCfg();
+  renderSpriteList();renderBoneTree();renderProps();renderZOrder();renderAnimList();renderTL();renderVP();
+  setstatus(`Project loaded -- ${S.sprites.length} sprites, ${S.bones.length} bones, ${S.anims.length} animations`);
+}
+function syncAnimCfg(){
+  if(!S.anim)return;
+  $('#an-name').value=S.anim.name;
+  $('#an-frames').value=S.anim.frameCount;
+  $('#an-loop').checked=S.anim.loop;
+}
+
+// -- PLAYBACK ------------------------------------
+function startPlay(){
+  if(!S.anim)return;
+  stopPlay(); // always clear any existing timer first
+  S.playing=true;
+  const fps=+$('#fps').value||12;
+  S.timer=setInterval(()=>{
+    S.frame++;
+    if(S.frame>=S.anim.frameCount){
+      if(S.anim.loop)S.frame=0;else{stopPlay();return;}
+    }
+    renderVP();renderTL();renderProps();
+    $('#tl-flbl').textContent=`Frame ${S.frame}`;
+  },1000/fps);
+  renderAnimList();
+}
+function stopPlay(){
+  S.playing=false;
+  if(S.timer!=null){clearInterval(S.timer);S.timer=null;}
+  renderAnimList();
+}
+
+// -- TIMELINE ------------------------------------
+const tlC=$('#tl-canvas'),tlX=tlC.getContext('2d');
+
+function renderTL(){
+  const anim=S.anim;
+  if(!anim){tlC.width=400;tlC.height=80;tlX.clearRect(0,0,400,80);$('#tl-names-inner').innerHTML='';return;}
+  const CELL=S.tlZoom,ROW=22,HEAD=22;
+  const H=HEAD+S.bones.length*ROW+4;
+  const W=Math.max(500,anim.frameCount*CELL+40);
+  tlC.width=W;tlC.height=H;
+  $('#tl-wrap').style.width=W+'px';$('#tl-wrap').style.height=H+'px';
+  tlX.fillStyle='#0e0e12';tlX.fillRect(0,0,W,H);
+  // header
+  tlX.fillStyle='#16161c';tlX.fillRect(0,0,W,HEAD);
+  for(let f=0;f<anim.frameCount;f++){
+    const sx=f*CELL;
+    tlX.fillStyle='#1e1e28';tlX.fillRect(sx,0,1,H);
+    if(f%5===0||CELL>=12){tlX.fillStyle='#6a6880';tlX.font='9px monospace';tlX.fillText(f,sx+2,12);}
+  }
+  // rows
+  S.bones.forEach((bone,ri)=>{
+    const ry=HEAD+ri*ROW;
+    tlX.fillStyle=ri%2===0?'#12121a':'#14141e';tlX.fillRect(0,ry,W,ROW);
+    tlX.fillStyle='#1a1a22';tlX.fillRect(0,ry+ROW-1,W,1);
+    // keyframes
+    anim.keyframes.filter(k=>k.boneId===bone.id).forEach(kf=>{
+      const sx=kf.frame*CELL+CELL/2, sy=ry+ROW/2;
+      const isBoneSel=bone.id===S.selBone;
+      const isKfSel=S.selKeys.some(sk=>sk.boneId===kf.boneId&&sk.frame===kf.frame);
+      tlX.save();tlX.translate(sx,sy);tlX.rotate(Math.PI/4);
+      const kw=isKfSel?7:5;
+      tlX.fillStyle=isKfSel?'#ff8040':isBoneSel?'#ffe080':'#e8a020';
+      tlX.fillRect(-kw/2,-kw/2,kw,kw);tlX.restore();
+      if(isKfSel){
+        tlX.strokeStyle='#ff8040';tlX.lineWidth=1;
+        tlX.strokeRect(sx-kw,sy-kw,kw*2,kw*2);
+      }
+    });
+  });
+  // labels
+  const labWrap=$('#tl-names-inner');labWrap.innerHTML='';
+  S.bones.forEach(bone=>{
+    const d=document.createElement('div');d.className='tl-lbl'+(bone.id===S.selBone?' sel':'');
+    d.textContent='  '.repeat(boneDepth(bone.id))+bone.name;labWrap.appendChild(d);
+  });
+  // playhead
+  const ph=$('#tl-ph');
+  ph.style.left=(S.frame*CELL+CELL/2)+'px';ph.style.height=H+'px';ph.style.top='0';
+}
+
+function tlCoords(e){
+  const rect=tlC.getBoundingClientRect();
+  const cx=e.clientX-rect.left, cy=e.clientY-rect.top;
+  const HEAD=22,ROW=22;
+  const frame=clamp(Math.floor(cx/S.tlZoom),0,S.anim?S.anim.frameCount-1:0);
+  const row=Math.floor((cy-HEAD)/ROW);
+  return{cx,cy,frame,row};
+}
+
+function tlHitKeyframe(frame,row){
+  if(!S.anim||row<0||row>=S.bones.length)return null;
+  const bone=S.bones[row];
+  const kf=S.anim.keyframes.find(k=>k.boneId===bone.id&&k.frame===frame);
+  return kf?{kf,bone}:null;
+}
+
+$('#tl-canvas').addEventListener('mousedown',e=>{
+  if(!S.anim)return;
+  const{cx,frame,row}=tlCoords(e);
+  const hit=tlHitKeyframe(frame,row);
+
+  if(hit){
+    if(e.shiftKey){
+      // toggle in selection
+      const idx=S.selKeys.findIndex(sk=>sk.boneId===hit.kf.boneId&&sk.frame===hit.kf.frame);
+      if(idx>=0) S.selKeys.splice(idx,1);
+      else S.selKeys.push({boneId:hit.kf.boneId,frame:hit.kf.frame});
+    } else {
+      // if clicking already-selected key, start drag; else select only this
+      const alreadySel=S.selKeys.some(sk=>sk.boneId===hit.kf.boneId&&sk.frame===hit.kf.frame);
+      if(!alreadySel) S.selKeys=[{boneId:hit.kf.boneId,frame:hit.kf.frame}];
+      // start drag
+      S.tlDrag={
+        startCX:cx,
+        keys: S.selKeys.map(sk=>{
+          const kf=S.anim.keyframes.find(k=>k.boneId===sk.boneId&&k.frame===sk.frame);
+          return{kf, origFrame:kf.frame};
+        }).filter(x=>x.kf),
+      };
+    }
+    S.selBone=hit.bone.id;
+    S.frame=frame;
+  } else {
+    // click on empty area — seek and clear selection
+    if(!e.shiftKey) S.selKeys=[];
+    S.frame=frame;
+    if(row>=0&&row<S.bones.length) S.selBone=S.bones[row].id;
+  }
+  $('#tl-flbl').textContent=`Frame ${S.frame}`;
+  renderVP();renderTL();renderProps();
+});
+
+$('#tl-canvas').addEventListener('mousemove',e=>{
+  if(!S.tlDrag||!S.anim)return;
+  const{cx}=tlCoords(e);
+  const deltaFrames=Math.round((cx-S.tlDrag.startCX)/S.tlZoom);
+  if(deltaFrames===0)return;
+  // move all selected keyframes
+  S.tlDrag.keys.forEach(({kf,origFrame})=>{
+    const nf=clamp(origFrame+deltaFrames,0,S.anim.frameCount-1);
+    // check no collision with other kfs on same bone (except self)
+    const collision=S.anim.keyframes.find(k=>k.boneId===kf.boneId&&k.frame===nf&&k!==kf);
+    if(!collision) kf.frame=nf;
+  });
+  // update selKeys to track new positions
+  S.selKeys=S.tlDrag.keys.map(({kf})=>({boneId:kf.boneId,frame:kf.frame}));
+  renderTL();
+});
+
+$('#tl-canvas').addEventListener('mouseup',e=>{
+  if(S.tlDrag){
+    pushUndo();  // save after drag complete
+    S.tlDrag=null;
+    renderTL();
+  }
+});
+
+// -- VIEWPORT INTERACTION ------------------------
+vpC.addEventListener('mousedown',e=>{
+  const{wx,wy}=s2w(e.offsetX,e.offsetY);
+  // Pan: middle button, right button, or Alt+left button, or Pan mode
+  if(e.button===1||e.button===2||e.altKey||S.mode==='pan'){
+    e.preventDefault();
+    S.panStart={mx:e.clientX,my:e.clientY,vx:S.vp.x,vy:S.vp.y};
+    vpC.classList.add('panning');return;
+  }
+
+  // -- IK mode --
+  if(S.mode==='ik'){
+    // Find which bone's tip was clicked -- that bone's chain gets solved
+    const frame=S.frame;
+    const R=12/S.vp.zoom;
+    let hit=null;
+    for(let i=S.bones.length-1;i>=0;i--){
+      const b=S.bones[i];
+      const tp=boneTip(b,frame);
+      if(Math.hypot(wx-tp.x,wy-tp.y)<R){hit=b;break;}
+    }
+    if(!hit&&S.selBone!=null) hit=getBone(S.selBone);
+    if(hit){
+      S.selBone=hit.id;
+      S.ikDrag={chain:ikChain(hit), wx, wy};
+      solveIK(S.ikDrag.chain,wx,wy);
+      renderBoneTree();renderProps();renderVP();renderTL();
+    }
+    return;
+  }
+  if(S.mode==='bone'){
+    // Click = set START, drag = set END live, release = confirm
+    const parentId=S.selBone;
+    let startWX=wx, startWY=wy;
+
+    // If child: root is locked to parent tip -- start point is parent tip
+    if(parentId!=null){
+      const pt=boneTip(getBone(parentId),S.frame);
+      startWX=pt.x; startWY=pt.y;
+    }
+
+  const bone={id:uid(),name:`bone${S.bones.length+1}`,parentId,
+    length:40,angle:0, tipDX:40, tipDY:0,
+    x:parentId!=null?0:wx,y:parentId!=null?0:wy,
+    spriteId:null,pivotX:null,pivotY:null};
+    S.bones.push(bone);S.selBone=bone.id;
+
+    // Store drag state so mousemove updates length+angle live
+    S.boneDraft={bone, startWX, startWY, parentId};
+    renderBoneTree();renderProps();renderVP();
+    setstatus('Drag to set bone direction and length, release to confirm');
+    return;
+  }
+  if(S.mode==='sel'){
+    const frame=S.frame;
+    // Two-pass hit test:
+    // Pass 1 -- TIPs only (smaller radius, but checked first so tip drag works)
+    // Pass 2 -- ROOTs (larger radius)
+    // EXCEPTION: if a bone is already selected, its ROOT beats everything nearby
+    //            so you can always re-grab the selected bone's root.
+    const R_ROOT = 10/S.vp.zoom;  // larger -- easier to grab
+    const R_TIP  =  8/S.vp.zoom;
+
+    let hit=null,hitType=null;
+
+    // Priority 0: selected bone root -- always wins when close enough
+    if(S.selBone!=null){
+      const sb=getBone(S.selBone);
+      if(sb){
+        const wt=boneWT(sb,frame);
+        if(Math.hypot(wx-wt.wx,wy-wt.wy)<R_ROOT){hit=sb;hitType='root';}
+      }
+    }
+
+    // Priority 1: any bone TIP (reverse order = top of visual stack first)
+    if(!hit){
+      for(let i=S.bones.length-1;i>=0;i--){
+        const b=S.bones[i];
+        const tp=boneTip(b,frame);
+        if(Math.hypot(wx-tp.x,wy-tp.y)<R_TIP){hit=b;hitType='tip';break;}
+      }
+    }
+
+    // Priority 2: any bone ROOT
+    if(!hit){
+      for(let i=S.bones.length-1;i>=0;i--){
+        const b=S.bones[i];
+        const wt=boneWT(b,frame);
+        if(Math.hypot(wx-wt.wx,wy-wt.wy)<R_ROOT){hit=b;hitType='root';break;}
+      }
+    }
+
+    if(hit){
+      S.selBone=hit.id;renderBoneTree();renderProps();renderVP();
+      const ip=S.anim?interpBone(hit.id,frame):hit;
+      S.drag={bone:hit,type:hitType,wx0:wx,wy0:wy,
+        oa:ip.angle,ox:S.anim?ip.x:hit.x,oy:S.anim?ip.y:hit.y};
+    }else{
+      S.selBone=null;renderBoneTree();renderProps();renderVP();
+    }
+  }
+});
+
+vpC.addEventListener('mousemove',e=>{
+  if(S.panStart){
+    S.vp.x=S.panStart.vx+(e.clientX-S.panStart.mx);
+    S.vp.y=S.panStart.vy+(e.clientY-S.panStart.my);
+    renderVP();return;
+  }
+  const{wx,wy}=s2w(e.offsetX,e.offsetY);
+
+  // -- IK drag --
+  if(S.ikDrag){
+    solveIK(S.ikDrag.chain,wx,wy);
+    renderVP();renderProps();
+    return;
+  }
+  if(S.boneDraft){
+    const{bone,startWX,startWY,parentId}=S.boneDraft;
+    const dx=wx-startWX, dy=wy-startWY;
+    bone.length=Math.max(2,Math.hypot(dx,dy));
+    // For bones placed in B mode (no sprite yet), angle drives direction
+    // tipDX/tipDY in local bone space = (length, 0) always -- angle does the rotation
+    const worldAngle=Math.atan2(dy,dx)*180/Math.PI;
+    if(parentId!=null){
+      const pw=boneWT(getBone(parentId),S.frame);
+      bone.angle=worldAngle-pw.wa;
+    }else{
+      bone.angle=worldAngle;
+    }
+    bone.tipDX=bone.length; bone.tipDY=0; // tip is always along local X for draft bones
+    setstatus(`"${bone.name}" -- length: ${bone.length.toFixed(0)}px -- release to confirm`);
+    renderVP();renderProps();
+    return;
+  }
+
+  if(S.drag){
+    const{bone,type,wx0,wy0,oa,ox,oy}=S.drag;
+    const frame=S.frame;
+    if(type==='root'&&bone.parentId==null){
+      setInterp('x',ox+(wx-wx0));setInterp('y',oy+(wy-wy0));
+    }
+    if(type==='tip'){
+      // Rotate bone so tip tracks mouse. tipDX/tipDY stay fixed (set in inspector).
+      // Compute what angle makes boneWorldTip() land on mouse position.
+      const wt=boneWT(bone,frame);
+      const parWA=bone.parentId!=null?boneWT(getBone(bone.parentId),frame).wa:0;
+      // Direction from root to mouse in world space
+      const worldAngle=Math.atan2(wy-wt.wy,wx-wt.wx)*180/Math.PI;
+      // tipDX/tipDY define the natural direction of tip in LOCAL space
+      const tipLocalAngle=Math.atan2(bone.tipDY??0, bone.tipDX??bone.length)*180/Math.PI;
+      // New local angle = worldAngle - tipLocalAngle - parWA
+      const na=worldAngle - tipLocalAngle - parWA;
+      setInterp('angle',na);
+    }
+    renderProps();return;
+  }
+  // hover cursor
+  if(S.mode==='sel'&&!S.drag){
+    const R_ROOT=10/S.vp.zoom, R_TIP=8/S.vp.zoom;
+    let cursor='default';
+    // selected bone root first
+    if(S.selBone!=null){
+      const sb=getBone(S.selBone);
+      if(sb){const wt=boneWT(sb,S.frame);if(Math.hypot(wx-wt.wx,wy-wt.wy)<R_ROOT)cursor='move';}
+    }
+    if(cursor==='default'){
+      for(const b of S.bones){
+        const tp=boneTip(b,S.frame);
+        if(Math.hypot(wx-tp.x,wy-tp.y)<R_TIP){cursor='grab';break;}
+        const wt=boneWT(b,S.frame);
+        if(Math.hypot(wx-wt.wx,wy-wt.wy)<R_ROOT){cursor='move';break;}
+      }
+    }
+    vpC.style.cursor=cursor;
+  }
+});
+
+vpC.addEventListener('mouseup',e=>{
+  if(S.ikDrag){S.ikDrag=null;renderTL();return;}
+  // -- Confirm bone draft --
+  if(S.boneDraft){
+    const{bone}=S.boneDraft;
+    if(bone.length<3){
+      // User just clicked without dragging -- remove the draft bone, stay in bone mode
+      S.bones=S.bones.filter(b=>b!==bone);
+      S.selBone=bone.parentId;
+      setstatus('Drag from the start point to set length and direction');
+    }else{
+      // Confirmed -- switch back to select mode
+      S.mode='sel';setModeBtns();
+      renderTL();
+      setstatus(`Bone "${bone.name}" ready -- assign a sprite in Properties`);
+    }
+    S.boneDraft=null;
+    renderBoneTree();renderProps();renderVP();
+    return;
+  }
+  S.drag=null;S.panStart=null;vpC.classList.remove('panning');vpC.style.cursor='';
+});
+vpC.addEventListener('mouseleave',()=>{
+  // Don't cancel boneDraft on mouseleave -- user might drag back in
+  S.drag=null;S.panStart=null;vpC.classList.remove('panning');vpC.style.cursor='';
+});
+
+vpC.addEventListener('contextmenu',e=>e.preventDefault());
+
+vpC.addEventListener('wheel',e=>{
+  e.preventDefault();
+  if(e.shiftKey||e.ctrlKey){
+    // Shift+scroll or Ctrl+scroll = zoom (pinch on macOS sends ctrlKey)
+    const f=e.deltaY>0?0.85:1.18;
+    const{wx,wy}=s2w(e.offsetX,e.offsetY);
+    S.vp.zoom=clamp(S.vp.zoom*f,0.25,32);
+    S.vp.x=e.offsetX-wx*S.vp.zoom;
+    S.vp.y=e.offsetY-wy*S.vp.zoom;
+  }else{
+    // Plain scroll = pan
+    S.vp.x-=e.deltaX;
+    S.vp.y-=e.deltaY;
+  }
+  renderVP();
+},{passive:false});
+
+// -- MODES ---------------------------------------
+function setModeBtns(){
+  $('#btn-sel').classList.toggle('hi',S.mode==='sel');
+  $('#btn-bone').classList.toggle('hi',S.mode==='bone');
+  $('#btn-ik').classList.toggle('hi',S.mode==='ik');
+  $('#btn-pan').classList.toggle('hi',S.mode==='pan');
+  $('#btn-onion').classList.toggle('hi',S.onion);
+  vpC.className=({sel:'sel',bone:'bone',pan:'pan',ik:'ik'}[S.mode]||'');
+  const hints={
+    sel:'Drag tip -> rotate * Drag root -> move * Scroll -> pan * Shift+Scroll -> zoom',
+    bone:'Click+drag to place bone',
+    ik:'Drag any bone tip -- whole chain follows (FABRIK IK)',
+    pan:'Drag to pan * Scroll -> pan * Shift+Scroll -> zoom',
+  };
+  $('#mode-hint').textContent=hints[S.mode]||'';
+}
+$('#btn-sel').onclick=()=>{S.mode='sel';setModeBtns();};
+$('#btn-bone').onclick=()=>{S.mode='bone';setModeBtns();};
+$('#btn-ik').onclick=()=>{S.mode='ik';setModeBtns();};
+$('#btn-pan').onclick=()=>{S.mode='pan';setModeBtns();};
+
+$('#btn-onion').onclick=()=>{S.onion=!S.onion;setModeBtns();renderVP();
+  setstatus(`Onion skinning ${S.onion?'ON':'OFF'}`);};
+
+$('#btn-copypose').onclick=()=>{
+  if(!S.anim){setstatus('No animation');return;}
+  S.copiedPose=S.bones.map(b=>{
+    const ip=interpBone(b.id,S.frame);
+    return{boneId:b.id,angle:ip.angle,x:ip.x,y:ip.y};
+  });
+  setstatus(`Pose copied from frame ${S.frame} (${S.bones.length} bones)`);
+};
+
+$('#btn-pastepose').onclick=()=>{
+  if(!S.copiedPose){setstatus('Nothing copied');return;}
+  if(!S.anim){setstatus('No animation');return;}
+  S.copiedPose.forEach(cp=>{
+    const b=getBone(cp.boneId);if(!b)return;
+    const prev=S.selBone; S.selBone=b.id;
+    setInterp('angle',cp.angle);
+    if(b.parentId==null){setInterp('x',cp.x);setInterp('y',cp.y);}
+    S.selBone=prev;
+  });
+  renderVP();renderTL();renderProps();
+  setstatus(`Pose pasted to frame ${S.frame}`);
+};
+
+document.addEventListener('keydown',e=>{
+  if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;
+  if(e.key==='v'||e.key==='V'){S.mode='sel';setModeBtns();}
+  if(e.key==='b'||e.key==='B'){S.mode='bone';setModeBtns();}
+  if(e.key==='i'||e.key==='I'){S.mode='ik';setModeBtns();}
+  if(e.key==='p'||e.key==='P'){S.mode='pan';setModeBtns();}
+  if(e.key==='o'||e.key==='O'){S.onion=!S.onion;setModeBtns();renderVP();}
+  if(e.key===' '){e.preventDefault();S.playing?stopPlay():startPlay();}
+  if(e.key==='ArrowLeft'){S.frame=Math.max(0,S.frame-1);$('#tl-flbl').textContent=`Frame ${S.frame}`;renderVP();renderTL();renderProps();}
+  if(e.key==='ArrowRight'){const mx=S.anim?S.anim.frameCount-1:0;S.frame=Math.min(mx,S.frame+1);$('#tl-flbl').textContent=`Frame ${S.frame}`;renderVP();renderTL();renderProps();}
+  if(e.key==='Delete'&&S.selBone!=null)deleteBone(S.selBone);
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();}
+  if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='c'){$('#btn-copypose').click();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='v'&&!e.shiftKey){e.preventDefault();$('#btn-pastepose').click();}
+});
+
+// -- BUTTONS -------------------------------------
+$('#btn-save').onclick=saveProject;
+$('#btn-load').onclick=()=>$('#file-proj').click();
+$('#file-proj').onchange=e=>{if(e.target.files[0])loadProject(e.target.files[0]);e.target.value='';};
+
+$('#btn-undo').onclick=undo;
+$('#btn-redo').onclick=redo;
+$('#btn-help').onclick=()=>$('#help-overlay').classList.add('show');
+$('#help-close').onclick=()=>$('#help-overlay').classList.remove('show');
+$('#help-overlay').addEventListener('click',e=>{if(e.target===$('#help-overlay'))$('#help-overlay').classList.remove('show');});
+
+$('#btn-sprites').onclick=$('#btn-sp-add').onclick=()=>$('#file-in').click();
+$('#file-in').onchange=e=>{loadSprites(e.target.files);e.target.value='';};
+$('#btn-bone-root').onclick=()=>addBone(null);
+$('#btn-play').onclick=startPlay;$('#btn-stop').onclick=stopPlay;
+$('#btn-zoom-in').onclick=()=>{S.vp.zoom=clamp(S.vp.zoom*1.5,0.25,32);renderVP();};
+$('#btn-zoom-out').onclick=()=>{S.vp.zoom=clamp(S.vp.zoom/1.5,0.25,32);renderVP();};
+$('#btn-zoom-fit').onclick=()=>{S.vp.zoom=2;S.vp.x=vpC.width/2;S.vp.y=vpC.height/2;renderVP();};
+$('#tl-prev').onclick=()=>{S.frame=Math.max(0,S.frame-1);$('#tl-flbl').textContent=`Frame ${S.frame}`;renderVP();renderTL();renderProps();};
+$('#tl-next').onclick=()=>{const mx=S.anim?S.anim.frameCount-1:0;S.frame=Math.min(mx,S.frame+1);$('#tl-flbl').textContent=`Frame ${S.frame}`;renderVP();renderTL();renderProps();};
+$('#tl-zoom').oninput=e=>{S.tlZoom=+e.target.value;renderTL();};
+$('#tl-delkey').onclick=()=>{
+  if(!S.anim||S.selBone==null)return;
+  const before=S.anim.keyframes.length;
+  S.anim.keyframes=S.anim.keyframes.filter(k=>!(k.boneId===S.selBone&&k.frame===S.frame));
+  setstatus(S.anim.keyframes.length<before?`Keyframe removed @ frame ${S.frame}`:'No keyframe here');
+  renderTL();
+};
+$('#btn-addkey').onclick=()=>{
+  if(!S.anim||S.selBone==null){setstatus('Select an animation and a bone first');return;}
+  const b=getBone(S.selBone),cur=interpBone(b.id,S.frame);
+  const ex=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
+  if(ex){ex.angle=cur.angle;ex.x=cur.x;ex.y=cur.y;}
+  else S.anim.keyframes.push({frame:S.frame,boneId:b.id,...cur});
+  renderTL();setstatus(`Key saved: ${b.name} @ frame ${S.frame}`);
+};
+$('#btn-addpose').onclick=()=>{
+  if(!S.anim){setstatus('Create an animation first');return;}
+  S.bones.forEach(b=>{
+    const cur=interpBone(b.id,S.frame);
+    const ex=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
+    if(ex){ex.angle=cur.angle;ex.x=cur.x;ex.y=cur.y;}
+    else S.anim.keyframes.push({frame:S.frame,boneId:b.id,...cur});
+  });
+  renderTL();setstatus(`Pose baked for all bones @ frame ${S.frame}`);
+};
+
+// -- ANIM MANAGEMENT -----------------------------
+$('#btn-new-anim').onclick=()=>showModal('New Animation',[
+  {id:'m-nm',label:'Name',type:'text',val:'idle'},
+  {id:'m-fc',label:'Frames',type:'number',val:'24'},
+],()=>{
+  const a={id:uid(),name:$('#m-nm').value||'anim',frameCount:Math.max(1,parseInt($('#m-fc').value)||24),loop:true,keyframes:[]};
+  S.anims.push(a);S.anim=a;S.frame=0;syncAnimCfg();renderAnimList();renderTL();renderVP();
+});
+$('#btn-upd-anim').onclick=()=>{
+  if(!S.anim)return;
+  S.anim.name=$('#an-name').value||S.anim.name;
+  S.anim.frameCount=Math.max(1,parseInt($('#an-frames').value)||24);
+  S.anim.loop=$('#an-loop').checked;
+  renderAnimList();renderTL();
+};
+
+// -- MODAL ---------------------------------------
+let _modalCb=null;
+function showModal(title,fields,cb){
+  $('#modal-title').textContent=title;
+  $('#modal-body').innerHTML=fields.map(f=>`<div class="mrow"><label>${f.label}</label><input id="${f.id}" type="${f.type||'text'}" value="${f.val||''}"></div>`).join('');
+  $('#modal-bg').classList.add('show');_modalCb=cb;
+  setTimeout(()=>{const i=$('#modal-body input');if(i)i.focus();},40);
+}
+$('#modal-ok').onclick=()=>{if(_modalCb)_modalCb();$('#modal-bg').classList.remove('show');};
+$('#modal-cancel').onclick=()=>$('#modal-bg').classList.remove('show');
+$('#modal-bg').addEventListener('click',e=>{if(e.target===$('#modal-bg'))$('#modal-bg').classList.remove('show');});
+
+// -- EXPORT --------------------------------------
+$('#btn-export').onclick=()=>{
+  if(!S.anim){setstatus('No animation selected');return;}
+  const anim=S.anim;
+  setstatus('Rendering...');
+  // find bounding box across all frames
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(let f=0;f<anim.frameCount;f++){
+    S.bones.filter(b=>b.spriteId!=null).forEach(bone=>{
+      const sp=S.sprites.find(s=>s.id===bone.spriteId);if(!sp)return;
+      const{wx,wy,wa}=boneWT(bone,f);
+      const r=deg2rad(wa);
+      const pvX=bone.pivotX??sp.trimW/2, pvY=bone.pivotY??sp.trimH/2;
+      [[0,0],[sp.trimW,0],[sp.trimW,sp.trimH],[0,sp.trimH]].forEach(([cx,cy])=>{
+        const lx=cx-pvX,ly=cy-pvY;
+        const gx=wx+Math.cos(r)*lx-Math.sin(r)*ly;
+        const gy=wy+Math.sin(r)*lx+Math.cos(r)*ly;
+        if(gx<minX)minX=gx;if(gx>maxX)maxX=gx;if(gy<minY)minY=gy;if(gy>maxY)maxY=gy;
+      });
+    });
+  }
+  if(!isFinite(minX)){setstatus('No sprites attached');return;}
+  const pad=2;
+  minX=Math.floor(minX-pad);minY=Math.floor(minY-pad);
+  maxX=Math.ceil(maxX+pad);maxY=Math.ceil(maxY+pad);
+  const W=maxX-minX,H=maxY-minY;
+  const oc=document.createElement('canvas');oc.width=W;oc.height=H;
+  const ox=oc.getContext('2d');
+  // imageSmoothingEnabled must be re-set after every save/restore -- set it globally
+  // and reset it after each restore() call
+  ox.imageSmoothingEnabled=false;
+  const files=[];
+  for(let f=0;f<anim.frameCount;f++){
+    ox.clearRect(0,0,W,H);
+    ox.imageSmoothingEnabled=false;
+    S.bones.filter(b=>b.spriteId!=null).forEach(bone=>{
+      const sp=S.sprites.find(s=>s.id===bone.spriteId);if(!sp)return;
+      const{wx,wy,wa}=boneWT(bone,f);
+      const pvX=bone.pivotX??sp.trimW/2,pvY=bone.pivotY??sp.trimH/2;
+      ox.save();
+      ox.imageSmoothingEnabled=false;
+      ox.translate(wx-minX,wy-minY);ox.rotate(deg2rad(wa));
+      ox.imageSmoothingEnabled=false;
+      ox.drawImage(sp.img,sp.trimX,sp.trimY,sp.trimW,sp.trimH,-pvX,-pvY,sp.trimW,sp.trimH);
+      ox.restore();
+      ox.imageSmoothingEnabled=false; // restore() resets this -- force it back
+    });
+    const b64=oc.toDataURL('image/png').split(',')[1];
+    files.push({name:`${anim.name}_${String(f).padStart(4,'0')}.png`,data:b64bytes(b64)});
+  }
+  const z=buildZip(files);
+  dlBlob(z,`${anim.name}_frames.zip`,'application/zip');
+  setstatus(`Exported ${files.length} frames -> ${anim.name}_frames.zip`);
+};
+function b64bytes(b64){const s=atob(b64),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;}
+function dlBlob(data,name,mime){const b=new Blob([data],{type:mime}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
+
+// -- ZIP -----------------------------------------
+function crc32(buf){
+  const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c;}
+  let c=0xFFFFFFFF;
+  for(const b of buf)c=t[(c^b)&0xff]^(c>>>8);
+  return(c^0xFFFFFFFF)>>>0;
+}
+function buildZip(files){
+  const enc=new TextEncoder(),parts=[],cents=[];let off=0;
+  files.forEach(({name,data})=>{
+    const nb=enc.encode(name),crc=crc32(data);
+    const lh=new DataView(new ArrayBuffer(30+nb.length));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);
+    [0,0,0,0].forEach((v,i)=>lh.setUint16(6+i*2,v,true));
+    lh.setUint32(14,crc,true);lh.setUint32(18,data.length,true);lh.setUint32(22,data.length,true);
+    lh.setUint16(26,nb.length,true);lh.setUint16(28,0,true);
+    new Uint8Array(lh.buffer,30).set(nb);
+    parts.push(new Uint8Array(lh.buffer),data);
+    cents.push({nb,crc,sz:data.length,off});off+=30+nb.length+data.length;
+  });
+  const cdStart=off;
+  cents.forEach(({nb,crc,sz,off:o})=>{
+    const cd=new DataView(new ArrayBuffer(46+nb.length));
+    cd.setUint32(0,0x02014b50,true);[20,20,0,0,0,0].forEach((v,i)=>cd.setUint16(4+i*2,v,true));
+    cd.setUint32(16,crc,true);cd.setUint32(20,sz,true);cd.setUint32(24,sz,true);
+    cd.setUint16(28,nb.length,true);[0,0,0,0].forEach((v,i)=>cd.setUint16(30+i*2,v,true));
+    cd.setUint32(38,0,true);cd.setUint32(42,o,true);
+    new Uint8Array(cd.buffer,46).set(nb);
+    parts.push(new Uint8Array(cd.buffer));off+=46+nb.length;
+  });
+  const cdSz=off-cdStart,eocd=new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0,0x06054b50,true);[0,0,cents.length,cents.length].forEach((v,i)=>eocd.setUint16(4+i*2,v,true));
+  eocd.setUint32(12,cdSz,true);eocd.setUint32(16,cdStart,true);eocd.setUint16(20,0,true);
+  parts.push(new Uint8Array(eocd.buffer));
+  const total=parts.reduce((s,p)=>s+p.length,0),out=new Uint8Array(total);let pos=0;
+  parts.forEach(p=>{out.set(p,pos);pos+=p.length;});return out;
+}
+
+// -- RESIZE --------------------------------------
+new ResizeObserver(resizeVP).observe($('#vp-wrap'));
+
+// -- INIT ----------------------------------------
+resizeVP();
+S.vp.x=vpC.width/2;S.vp.y=vpC.height/2;
+renderVP();renderSpriteList();renderBoneTree();renderProps();renderAnimList();renderTL();renderZOrder();
+setModeBtns();
+updateUndoButtons();
+setstatus('① Load sprites  ② Add root bone  ③ Attach sprite + set pivot  ④ Create animation  ⑤ Rotate bones & add keyframes');
+</script>
+</body>
+</html>
