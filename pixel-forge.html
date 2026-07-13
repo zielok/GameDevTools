@@ -984,7 +984,6 @@ function renderLayerList(){
 
     const vis=document.createElement('span');
     vis.className='lvis'+(layer.visible?' on':'');
-    vis.textContent=layer.visible?'&#128065;':'&#128209;';
     vis.innerHTML=layer.visible?'&#128065;':'&#128209;';
     vis.title='Toggle visibility';
     vis.onclick=e=>{e.stopPropagation();layer.visible=!layer.visible;renderLayerList();renderMain();};
@@ -3665,8 +3664,7 @@ function renderRecentList(){
   empty.style.display='none';
   list.forEach(r=>{
     const row=document.createElement('div');row.className='recent-item';
-    const ico=document.createElement('span');ico.textContent=r.type==='pfp'?'&#128230;':'&#128247;';
-    ico.innerHTML=r.type==='pfp'?'&#128230;':'&#128247;';
+    const ico=document.createElement('span');ico.innerHTML=r.type==='pfp'?'&#128230;':'&#128247;';
     const nm=document.createElement('div');nm.className='ri-name';nm.textContent=r.name;
     const dt=document.createElement('div');dt.className='ri-date';
     dt.textContent=new Date(r.date).toLocaleDateString();
