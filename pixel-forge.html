@@ -75,14 +75,39 @@ select{background:var(--panel2);color:var(--text);border:1px solid var(--border)
 
 /* Palette pane */
 #paletteGrid{display:flex;flex-wrap:wrap;gap:3px;}
-.psw{width:18px;height:18px;border-radius:3px;border:1px solid rgba(0,0,0,.5);cursor:pointer;
+.psw{width:18px;height:18px;border-radius:3px;border:1px solid rgba(0,0,0,.5);cursor:pointer;position:relative;
   background-size:8px 8px;
   background-image:linear-gradient(45deg,#555 25%,transparent 25%),linear-gradient(-45deg,#555 25%,transparent 25%),
   linear-gradient(45deg,transparent 75%,#555 75%),linear-gradient(-45deg,transparent 75%,#555 75%);
   background-position:0 0,0 4px,4px -4px,-4px 0;}
+.psw-ramp-badge{position:absolute;bottom:-3px;right:-3px;width:9px;height:9px;border-radius:50%;
+  border:1.5px solid var(--panel);background:var(--panel2);cursor:pointer;box-sizing:border-box;}
+.psw-ramp-badge.on{background:var(--accent);border-color:#fff;}
 .psw:hover{outline:2px solid var(--accent);}
 .psw.selFg{outline:3px solid #fff;}
 .psw.selBg{outline:3px solid var(--warn);}
+
+.ramp-chip{position:relative;width:22px;height:22px;border-radius:3px;border:1px solid rgba(0,0,0,.5);
+  background-size:8px 8px;
+  background-image:linear-gradient(45deg,#555 25%,transparent 25%),linear-gradient(-45deg,#555 25%,transparent 25%),
+  linear-gradient(45deg,transparent 75%,#555 75%),linear-gradient(-45deg,transparent 75%,#555 75%);
+  background-position:0 0,0 4px,4px -4px,-4px 0;cursor:pointer;}
+.ramp-chip .ramp-idx{position:absolute;bottom:-1px;left:1px;font-size:7px;color:rgba(255,255,255,.65);
+  text-shadow:0 0 2px #000;pointer-events:none;}
+.ramp-chip .ramp-x{position:absolute;top:-5px;right:-5px;width:12px;height:12px;border-radius:50%;
+  background:var(--danger);color:#fff;font-size:9px;line-height:12px;text-align:center;display:none;}
+.ramp-chip:hover .ramp-x{display:block;}
+
+/* ── Help panel ── */
+#helpWin table{width:100%;border-collapse:collapse;margin-bottom:6px;}
+#helpWin td{padding:4px 6px;border-bottom:1px solid var(--border);vertical-align:top;font-size:12px;}
+#helpWin td.k{width:150px;white-space:nowrap;}
+#helpWin h3{color:var(--accent);font-size:12.5px;border-bottom:1px solid var(--border);
+  padding-bottom:5px;margin:18px 0 8px;}
+#helpWin h3:first-child{margin-top:0;}
+#helpWin kbd{background:var(--panel);border:1px solid var(--border);border-radius:4px;
+  padding:1px 6px;font-family:Consolas,monospace;font-size:11px;color:var(--accent);white-space:nowrap;}
+#helpWin code{background:var(--panel);padding:1px 5px;border-radius:3px;font-size:11px;color:var(--warn);}
 
 /* Cleanup pane common */
 .hint{font-size:11px;color:var(--dim);line-height:1.5;background:var(--panel2);border-radius:4px;padding:6px 8px;}
@@ -141,6 +166,16 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
 #playBtn{background:var(--accent-d);border-color:var(--accent);color:#fff;grid-column:1/3;}
 #playBtn.playing{background:var(--danger);border-color:var(--danger);}
 
+/* ── New file presets ── */
+.nf-preset{background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:8px 4px;cursor:pointer;display:flex;flex-direction:column;align-items:center;
+  gap:3px;font-size:10px;color:var(--text);}
+.nf-preset:hover{border-color:var(--accent);background:var(--panel2);}
+.nf-preset.active{border-color:var(--accent);background:var(--accent-d);color:#fff;}
+.nf-preset .nf-swatch{border:1px solid var(--dim);background:repeating-conic-gradient(#26262f 0% 25%,#201f28 0% 50%) 0 0/6px 6px;}
+.nf-preset .nf-dims{font-weight:600;}
+.nf-preset .nf-label{color:var(--dim);font-size:9px;}
+.nf-preset.active .nf-label{color:#ddd;}
 /* ── Onion skin overlay ── */
 #onionControls{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px;
   border-left:1px solid var(--border);padding-left:8px;white-space:nowrap;}
@@ -203,6 +238,7 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
     <button class="hbtn" id="btnZoomFit" title="Fit to screen">Fit</button>
     <button class="hbtn" id="btnZoom1" title="Actual size (1:1)">1:1</button>
   </label>
+  <button class="hbtn" id="btnHelp" title="Help &amp; keyboard shortcuts" style="font-weight:700;">?</button>
 </header>
 
 <div id="layout">
@@ -226,16 +262,46 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
     <div class="tool" data-tool="lasso" title="Lasso select (Q) — freehand" style="font-size:15px;">&#8766;</div>
     <div class="tool" data-tool="wand" title="Magic wand (W) — select by color">&#10022;</div>
     <div class="tool" data-tool="text" title="Text (T) — click to place bitmap text" style="font-weight:700;">T</div>
+    <div class="tool" data-tool="shade" title="Shading Ink (H)&#10;LMB = shift lighter (next in ramp)&#10;RMB = shift darker (previous in ramp)&#10;Set ramp in the Palette panel">&#9681;</div>
     <div class="tool" data-tool="zoom" title="Magnifier (M) — drag to zoom into area">&#128269;</div>
+
     <div class="tool-sep"></div>
-    <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+    <div id="grpSize" style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;">
       <span style="font-size:9px;color:var(--dim)">SIZE</span>
       <input type="number" id="brushSize" value="1" min="1" max="32"
         style="width:64px;text-align:center;padding:2px 2px;font-size:12px;background:var(--panel2);
         color:var(--text);border:1px solid var(--border);border-radius:4px;">
     </div>
+    <div id="grpShape" style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:2px;">
+      <span style="font-size:9px;color:var(--dim)">SHAPE</span>
+      <select id="brushShape" style="width:64px;padding:2px 0;font-size:10px;text-align:center;
+        background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        <option value="square" selected>&#9632; sq</option>
+        <option value="circle">&#11044; cir</option>
+        <option value="ditherA">&#9618; d/A</option>
+        <option value="ditherB">&#9619; d/B</option>
+      </select>
+    </div>
+
     <div class="tool-sep"></div>
     <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+      <span style="font-size:9px;color:var(--dim)">TILE</span>
+      <button id="btnTile" title="Tile mode — wrap at edges" style="width:64px;font-size:10px;padding:2px 0;">Off</button>
+    </div>
+    <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:2px;">
+      <span style="font-size:9px;color:var(--dim)">SYM</span>
+      <select id="symMode" style="width:64px;padding:2px 0;font-size:10px;text-align:center;
+        background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+        <option value="none" selected>Off</option>
+        <option value="h">H</option>
+        <option value="v">V</option>
+        <option value="hv">H+V</option>
+        <option value="4">×4</option>
+      </select>
+    </div>
+
+    <div id="grpDither" class="tool-sep" style="display:none;"></div>
+    <div id="grpDitherBody" style="width:64px;display:none;flex-direction:column;align-items:center;gap:2px;">
       <span style="font-size:9px;color:var(--dim)">DITHER</span>
       <select id="gradScope" style="width:64px;padding:2px 0;font-size:10px;text-align:center;
         background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;">
@@ -243,8 +309,9 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
         <option value="bayer2">Bayer 2×2</option>
       </select>
     </div>
-    <div class="tool-sep"></div>
-    <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+
+    <div id="grpFont" class="tool-sep" style="display:none;"></div>
+    <div id="grpFontBody" style="width:64px;display:none;flex-direction:column;align-items:center;gap:2px;">
       <span style="font-size:9px;color:var(--dim)">FONT</span>
       <select id="textFont" style="width:64px;padding:2px 0;font-size:10px;text-align:center;
         background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;">
@@ -263,40 +330,15 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
         style="width:64px;text-align:center;padding:2px 2px;font-size:11px;background:var(--panel2);
         color:var(--text);border:1px solid var(--border);border-radius:4px;" title="Text size (px for system fonts, scale 1-8 for Pixel 5x7)">
     </div>
-    <div class="tool-sep"></div>
-    <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;">
-      <span style="font-size:9px;color:var(--dim)">TILE</span>
-      <button id="btnTile" title="Tile mode — wrap at edges" style="width:64px;font-size:10px;padding:2px 0;">Off</button>
-    </div>
-    <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;">
-      <span style="font-size:9px;color:var(--dim)">SYM</span>
-      <select id="symMode" style="width:64px;padding:2px 0;font-size:10px;text-align:center;
-        background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-        <option value="none" selected>Off</option>
-        <option value="h">H</option>
-        <option value="v">V</option>
-        <option value="hv">H+V</option>
-        <option value="4">×4</option>
-      </select>
-    </div>
-    <div class="tool-sep"></div>
-    <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+
+    <div id="grpBrush" class="tool-sep" style="display:none;"></div>
+    <div id="grpBrushBody" style="width:64px;display:none;flex-direction:column;align-items:center;gap:2px;">
       <span style="font-size:9px;color:var(--dim)">BRUSH</span>
       <input type="file" id="brushFile" accept="image/png,image/gif,image/webp" style="display:none">
       <button id="btnBrushLoad" title="Load custom brush PNG" style="width:64px;font-size:10px;padding:2px 0;">Load</button>
       <button id="btnBrushClear" title="Clear custom brush" style="width:64px;font-size:10px;padding:2px 0;display:none">&#10005;</button>
     </div>
-    <div class="tool-sep"></div>
-    <div style="width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;">
-      <span style="font-size:9px;color:var(--dim)">SHAPE</span>
-      <select id="brushShape" style="width:64px;padding:2px 0;font-size:10px;text-align:center;
-        background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;">
-        <option value="square" selected>&#9632; sq</option>
-        <option value="circle">&#11044; cir</option>
-        <option value="ditherA">&#9618; d/A</option>
-        <option value="ditherB">&#9619; d/B</option>
-      </select>
-    </div>
+
     <div class="tool-sep"></div>
     <div id="colorPair" title="Foreground (top) &amp; Background (bottom)&#10;Click to swap colors">
       <div id="colBg"></div>
@@ -357,6 +399,11 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
         <button id="btnRefreshPal" style="flex:1;font-size:11px">Refresh from image</button>
         <input type="color" id="hexPicker" value="#000000" title="Add custom color"
           style="width:28px;height:26px;padding:1px;border:1px solid var(--border);background:none;border-radius:4px;cursor:pointer;">
+      </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+        <div class="hint" style="margin-bottom:4px;">Shading Ink ramp — order defines dark→light (or your sort order). Tip: sort the palette by <b>lightness</b> first. Click the small dot on a swatch above to mark it for the ramp — if none are marked, the whole palette is used.</div>
+        <button id="btnUseShadeRamp" style="width:100%;font-size:11px;">Use current palette as Shade Ramp</button>
+        <div id="shadeRampPreview" style="display:flex;flex-wrap:wrap;gap:2px;margin-top:6px;"></div>
       </div>
     </div>
 
@@ -470,6 +517,23 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
 </div>
 
 <!-- Resize modal -->
+<!-- New File modal -->
+<div id="newFileModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--panel2);border:1px solid var(--accent);border-radius:8px;padding:20px;min-width:320px;display:flex;flex-direction:column;gap:12px;">
+    <h3 style="margin:0;color:var(--accent)">New File</h3>
+    <div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:6px;">Presets</div>
+      <div id="newFilePresets" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
+    </div>
+    <div class="row"><label>Width</label><input type="number" id="newFileW" min="1" max="4096" value="32" style="width:70px"> px</div>
+    <div class="row"><label>Height</label><input type="number" id="newFileH" min="1" max="4096" value="32" style="width:70px"> px</div>
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button id="newFileCancel" style="flex:1">Cancel</button>
+      <button id="newFileGo" class="pri" style="flex:2">Create</button>
+    </div>
+  </div>
+</div>
+
 <div id="resizeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;align-items:center;justify-content:center;">
   <div style="background:var(--panel2);border:1px solid var(--accent);border-radius:8px;padding:20px;min-width:280px;display:flex;flex-direction:column;gap:10px;">
     <h3 style="margin:0;color:var(--accent)">Resize Canvas</h3>
@@ -507,6 +571,122 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
   <span style="font-size:11px;color:var(--dim)">Ref opacity</span>
   <input type="range" id="refOpacity" min="5" max="80" value="35" style="width:80px">
   <button id="refClose" style="font-size:11px;padding:2px 6px;">&#10005;</button>
+</div>
+
+<div id="helpWin" style="display:none;position:fixed;z-index:300;
+  background:var(--panel2);border:1px solid var(--accent);border-radius:8px;
+  box-shadow:0 6px 24px rgba(0,0,0,.7);user-select:none;
+  top:44px;left:100px;width:640px;">
+  <div id="helpWinBar" style="display:flex;align-items:center;gap:8px;
+    padding:6px 12px;border-bottom:1px solid var(--border);cursor:move;background:var(--panel2);border-radius:8px 8px 0 0;">
+    <span style="font-size:13px;color:var(--accent);font-weight:600;">&#9635; Pixel Forge — Help</span>
+    <div style="flex:1"></div>
+    <span id="helpWinClose" style="cursor:pointer;color:var(--danger);font-size:18px;padding:0 3px;line-height:1;">&times;</span>
+  </div>
+  <div style="padding:12px 18px;max-height:72vh;overflow-y:auto;">
+
+    <h3>Tools</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">
+    <table>
+      <tr><td class="k"><kbd>B</kbd></td><td>Pencil</td></tr>
+      <tr><td class="k"><kbd>P</kbd></td><td>Pixel-perfect pencil — auto-thins staircase lines</td></tr>
+      <tr><td class="k"><kbd>E</kbd></td><td>Eraser</td></tr>
+      <tr><td class="k"><kbd>G</kbd></td><td>Flood fill</td></tr>
+      <tr><td class="k"><kbd>D</kbd></td><td>Dither gradient — FG&#8594;BG in Bayer pattern</td></tr>
+      <tr><td class="k"><kbd>I</kbd></td><td>Eyedropper (LMB=FG, RMB=BG)</td></tr>
+      <tr><td class="k"><kbd>L</kbd></td><td>Line</td></tr>
+      <tr><td class="k"><kbd>U</kbd> / <kbd>Shift+U</kbd></td><td>Rectangle outline / filled</td></tr>
+      <tr><td class="k"><kbd>O</kbd> / <kbd>Shift+O</kbd></td><td>Ellipse outline / filled</td></tr>
+      <tr><td class="k">&mdash;</td><td>Stamp — load a custom PNG brush</td></tr>
+    </table>
+    <table>
+      <tr><td class="k"><kbd>R</kbd></td><td>Rectangle select</td></tr>
+      <tr><td class="k"><kbd>Q</kbd></td><td>Lasso select (freehand)</td></tr>
+      <tr><td class="k"><kbd>W</kbd></td><td>Magic wand — select by color</td></tr>
+      <tr><td class="k"><kbd>T</kbd></td><td>Text — bitmap or system font</td></tr>
+      <tr><td class="k"><kbd>H</kbd></td><td>Shading Ink — LMB lighter / RMB darker along a ramp</td></tr>
+      <tr><td class="k"><kbd>M</kbd></td><td>Magnifier — drag to zoom, RMB to zoom out</td></tr>
+    </table>
+    </div>
+
+    <div class="hint">Hold <kbd>Shift</kbd> while drawing a new selection to <b>add</b> it to the
+    current one, or <kbd>Alt</kbd> to <b>subtract</b>. Works with Rectangle, Lasso and Magic Wand,
+    and across different tools in the same selection.</div>
+
+    <h3>Brush options</h3>
+    <table>
+      <tr><td class="k"><kbd>[</kbd> / <kbd>]</kbd></td><td>Decrease / increase brush size</td></tr>
+      <tr><td class="k">SHAPE</td><td>Square, circle, or ordered-dither patterns (checkerboard A/B)</td></tr>
+      <tr><td class="k">TILE</td><td>Wraps drawing across canvas edges, with a live tiled preview</td></tr>
+      <tr><td class="k">SYM</td><td>Mirror drawing: horizontal, vertical, both, or 4-way</td></tr>
+    </table>
+    <div class="hint">Tool-specific options (SIZE/SHAPE, DITHER, FONT, BRUSH) only appear in the
+    sidebar when a matching tool is active.</div>
+
+    <h3>Editing</h3>
+    <table>
+      <tr><td class="k"><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>Undo / Redo</td></tr>
+      <tr><td class="k"><kbd>Ctrl+C</kbd>/<kbd>X</kbd>/<kbd>V</kbd></td><td>Copy / Cut / Paste selection</td></tr>
+      <tr><td class="k"><kbd>Ctrl+A</kbd></td><td>Select all (active layer)</td></tr>
+      <tr><td class="k"><kbd>Ctrl+D</kbd></td><td>Deselect (commits floating selection)</td></tr>
+      <tr><td class="k"><kbd>Delete</kbd></td><td>Clear selection contents</td></tr>
+      <tr><td class="k"><kbd>Escape</kbd></td><td>Commit / cancel current selection</td></tr>
+    </table>
+
+    <h3>View</h3>
+    <table>
+      <tr><td class="k"><kbd>+</kbd> / <kbd>-</kbd></td><td>Zoom in / out</td></tr>
+      <tr><td class="k">Fit / 1:1</td><td>Fit canvas to window / actual-size zoom</td></tr>
+      <tr><td class="k">RMB drag / <kbd>Space</kbd>+drag</td><td>Pan the canvas</td></tr>
+      <tr><td class="k">Mouse wheel</td><td>Pan (no zoom)</td></tr>
+    </table>
+
+    <h3>Layers, Frames &amp; Animation</h3>
+    <table>
+      <tr><td class="k">Layers panel</td><td>Add / duplicate / delete / reorder / merge down / flatten;
+        per-layer opacity &amp; visibility; double-click a name to rename</td></tr>
+      <tr><td class="k">Frame strip</td><td>Add / duplicate / delete, per-frame duration, onion skinning
+        (prev=red, next=blue), Play/Stop</td></tr>
+      <tr><td class="k">Compact mode</td><td>Hides frame thumbnails to fit more frames on screen</td></tr>
+      <tr><td class="k">Tags</td><td>Label frame ranges (e.g. <code>idle</code> 1&#8211;5). Click a tag
+        chip to filter (playback loops within it); right-click to edit</td></tr>
+    </table>
+
+    <h3>Shading Ink ramp</h3>
+    <div class="hint">
+    1. Paint a few shades of a hue &#8594; 2. In <b>Palette</b>, sort by <b>lightness</b> &#8594;
+    3. Optionally click the dot on specific swatches to hand-pick ramp colors (skip to use the whole
+    palette) &#8594; 4. Click <b>"Use current palette as Shade Ramp"</b> &#8594; 5. Pick the
+    Shading Ink tool (<kbd>H</kbd>) and paint. Colors outside the ramp are left untouched.</div>
+
+    <h3>Color &amp; Palette</h3>
+    <table>
+      <tr><td class="k">Sort</td><td>By lightness, hue, saturation, R/G/B, or "similar colors" chain</td></tr>
+      <tr><td class="k">Presets</td><td>PICO-8, Game Boy, CGA, NES, DB16/DB32, Endesga32, Lospec</td></tr>
+      <tr><td class="k">Refresh from image</td><td>Rebuilds palette from all visible layers of the
+        active frame — only updates when clicked, so painting won't reset a loaded palette</td></tr>
+    </table>
+
+    <h3>File</h3>
+    <table>
+      <tr><td class="k">Open PNG</td><td>Import as a new single-layer, single-frame project</td></tr>
+      <tr><td class="k">Open Project</td><td>Load a <code>.pfp</code> project — layers, frames, tags, all</td></tr>
+      <tr><td class="k">Save Project</td><td>Save everything as <code>.pfp</code></td></tr>
+      <tr><td class="k">Save PNG</td><td>Flattened export of the active frame</td></tr>
+      <tr><td class="k">Export&#8230;</td><td>Sprite sheet and/or ZIP of frame PNGs. Tag names prefix
+        filenames and get their own sheet</td></tr>
+    </table>
+
+    <h3>Other</h3>
+    <table>
+      <tr><td class="k">Reference image</td><td>Semi-transparent underlay to trace over; clipped to
+        canvas view, follows pan/zoom</td></tr>
+      <tr><td class="k">Preview window</td><td>Floating, draggable preview at 1&#215;&#8211;4&#215; scale</td></tr>
+      <tr><td class="k">Cleanup</td><td>Finds &amp; auto-fixes stray pixels (orphans/islands)</td></tr>
+      <tr><td class="k">Resize / Crop</td><td>Nearest/bilinear resize; crop to content bounds</td></tr>
+    </table>
+
+  </div>
 </div>
 
 <div id="layersWin" style="display:none;position:fixed;z-index:300;
@@ -643,6 +823,8 @@ const S={
   playing:false,playTimer:null,onionPrev:40,onionNext:20,
   tileMode:false,symMode:'none',
   tags:[],frameCompact:false,tagFilter:null,
+  shadeRamp:[], // ordered array of {r,g,b,a} for the Shading Ink tool
+  shadeRampSelection:new Set(), // keys (from keyOf) of palette swatches marked for the ramp
   orphan:{islands:[],idx:-1,cell:20,skipped:new Set(),_manualCell:false},
   island:{islands:[],idx:-1,cell:20,skipped:new Set(),_manualCell:false},
 };
@@ -1461,31 +1643,34 @@ function inBounds(x,y){return x>=0&&y>=0&&x<S.w&&y<S.h;}
 // Tracks the previous-previous pixel to detect and remove "fat corner" artifacts.
 // Rule: after drawing pixel C, if B is diagonally adjacent to both A and C,
 // B is a redundant corner pixel and gets erased.
-const ppState = { prevX:-1, prevY:-1, prevPrevX:-1, prevPrevY:-1 };
+// Pixel-perfect pencil: tracks the last 3 committed points of the current
+// stroke (A, B, C where C is newest). If A and C end up touching each other
+// (Chebyshev distance ≤ 1, i.e. adjacent including diagonally) once C is
+// placed, then B was just a redundant corner pixel — it gets erased and C
+// effectively takes its place in the running history.
+const ppHistory = [];
 
-function ppReset(){ ppState.prevX=-1; ppState.prevY=-1; ppState.prevPrevX=-1; ppState.prevPrevY=-1; }
+function ppReset(){ ppHistory.length = 0; }
 
 function ppPlot(x, y, rgba, eraseRgba){
   if(!inBounds(x,y)) return;
-  const {prevX:bx, prevY:by, prevPrevX:ax, prevPrevY:ay} = ppState;
-
-  // check if B is a redundant corner: B diagonal from both A and C
-  if(bx>=0 && by>=0 && ax>=0 && ay>=0){
-    const dxAB = bx-ax, dyAB = by-ay;
-    const dxBC = x-bx,  dyBC = y-by;
-    // Both steps are diagonal (|dx|=1,|dy|=1), but in different axis
-    const abDiag = Math.abs(dxAB)===1 && Math.abs(dyAB)===1;
-    const bcDiag = Math.abs(dxBC)===1 && Math.abs(dyBC)===1;
-    // fat corner: both steps diagonal, but one axis reverses direction (XOR)
-    if(abDiag && bcDiag && ((dxAB!==dxBC) !== (dyAB!==dyBC))){
-      // B is the fat corner — erase it
-      setPx(bx, by, ...eraseRgba);
-    }
-  }
+  const last = ppHistory[ppHistory.length-1];
+  if(last && last.x===x && last.y===y) return; // no duplicate consecutive points
 
   setPx(x, y, ...rgba);
-  ppState.prevPrevX = bx; ppState.prevPrevY = by;
-  ppState.prevX = x;      ppState.prevY = y;
+  ppHistory.push({x,y});
+
+  if(ppHistory.length>=3){
+    const c=ppHistory[ppHistory.length-1];
+    const b=ppHistory[ppHistory.length-2];
+    const a=ppHistory[ppHistory.length-3];
+    if(Math.max(Math.abs(a.x-c.x),Math.abs(a.y-c.y))<=1){
+      // B is redundant — A and C already touch without it
+      setPx(b.x, b.y, ...eraseRgba);
+      ppHistory.splice(ppHistory.length-2,1); // drop B, leaving [...,A,C]
+    }
+  }
+  if(ppHistory.length>3) ppHistory.shift(); // only the last 3 points ever matter
 }
 
 
@@ -1889,11 +2074,60 @@ $('#fileIn').onchange=e=>{
   img.onerror=()=>alert("Could not load PNG.");
   img.src=url;
 };
+// ── New file presets ────────────────────────────────────────────────────────
+const NEW_FILE_PRESETS=[
+  {w:8,h:8,label:'Icon'},
+  {w:16,h:16,label:''},
+  {w:32,h:32,label:''},
+  {w:64,h:64,label:''},
+  {w:96,h:96,label:''},
+  {w:128,h:128,label:''},
+  {w:256,h:256,label:''},
+  {w:160,h:144,label:'Game Boy'},
+  {w:256,h:240,label:'NES'},
+  {w:320,h:180,label:'16:9'},
+  {w:640,h:360,label:'16:9'},
+  {w:960,h:540,label:'16:9'},
+];
+
+function renderNewFilePresets(){
+  const grid=$('#newFilePresets'); grid.innerHTML='';
+  NEW_FILE_PRESETS.forEach(p=>{
+    const btn=document.createElement('div');
+    btn.className='nf-preset';
+    const maxSwatch=28, ratio=p.w/p.h;
+    const sw=ratio>=1?maxSwatch:Math.round(maxSwatch*ratio);
+    const sh=ratio>=1?Math.round(maxSwatch/ratio):maxSwatch;
+    btn.innerHTML=`<div class="nf-swatch" style="width:${sw}px;height:${sh}px;"></div>`+
+      `<div class="nf-dims">${p.w}\u00d7${p.h}</div>`+
+      (p.label?`<div class="nf-label">${p.label}</div>`:'');
+    btn.onclick=()=>{
+      $('#newFileW').value=p.w; $('#newFileH').value=p.h;
+      [...grid.children].forEach(c=>c.classList.remove('active'));
+      btn.classList.add('active');
+    };
+    grid.appendChild(btn);
+  });
+}
+renderNewFilePresets();
+
 $('#btnNew').onclick=()=>{
-  const ws=prompt("Width?","32");if(!ws)return;
-  const hs=prompt("Height?","32");if(!hs)return;
-  const w=parseInt(ws),h=parseInt(hs);
+  [...$('#newFilePresets').children].forEach(c=>c.classList.remove('active'));
+  $('#newFileModal').style.display='flex';
+  $('#newFileW').focus();
+};
+$('#newFileCancel').onclick=()=>{ $('#newFileModal').style.display='none'; };
+$('#newFileW').addEventListener('input',()=>{
+  [...$('#newFilePresets').children].forEach(c=>c.classList.remove('active'));
+});
+$('#newFileH').addEventListener('input',()=>{
+  [...$('#newFilePresets').children].forEach(c=>c.classList.remove('active'));
+});
+
+$('#newFileGo').onclick=()=>{
+  const w=parseInt($('#newFileW').value),h=parseInt($('#newFileH').value);
   if(!w||!h||w<1||h<1||w>4096||h>4096){alert("Invalid size.");return;}
+  $('#newFileModal').style.display='none';
   S.fileName="untitled";
   initProject(w,h);
   resetCleanup('orphan');resetCleanup('island');
@@ -1994,7 +2228,21 @@ function setTool(t){
   else if(t==='zoom') cvMain.classList.add('cur-zoom');
   else if(t==='picker') cvMain.classList.add('cur-picker');
   // all others use default crosshair from CSS
-  $('#stTool').textContent={pencil:'Pencil',pencilPP:'Pixel-perfect',eraser:'Eraser',fill:'Fill',grad:'Gradient fill',picker:'Eyedropper',stamp:'Stamp Brush',rect:'Rect Select',lasso:'Lasso Select',wand:'Magic Wand',text:'Text',zoom:'Magnifier',line:'Line',rectDraw:'Rectangle',rectFill:'Rect Filled',ellipse:'Ellipse',ellipseFill:'Ellipse Filled'}[t]||t;
+  $('#stTool').textContent={pencil:'Pencil',pencilPP:'Pixel-perfect',eraser:'Eraser',fill:'Fill',grad:'Gradient fill',picker:'Eyedropper',stamp:'Stamp Brush',rect:'Rect Select',lasso:'Lasso Select',wand:'Magic Wand',text:'Text',shade:'Shading Ink',zoom:'Magnifier',line:'Line',rectDraw:'Rectangle',rectFill:'Rect Filled',ellipse:'Ellipse',ellipseFill:'Ellipse Filled'}[t]||t;
+
+  // ── Contextual option groups: only show what applies to the active tool ──
+  const usesSize=['pencil','pencilPP','eraser','shade','line','rectDraw','ellipse'].includes(t);
+  const usesDither=t==='grad';
+  const usesFont=t==='text';
+  const usesBrush=t==='stamp';
+  $('#grpSize').style.display=usesSize?'flex':'none';
+  $('#grpShape').style.display=usesSize?'flex':'none';
+  $('#grpDither').style.display=usesDither?'block':'none';
+  $('#grpDitherBody').style.display=usesDither?'flex':'none';
+  $('#grpFont').style.display=usesFont?'block':'none';
+  $('#grpFontBody').style.display=usesFont?'flex':'none';
+  $('#grpBrush').style.display=usesBrush?'block':'none';
+  $('#grpBrushBody').style.display=usesBrush?'flex':'none';
 }
 
 // keyboard shortcuts
@@ -2011,6 +2259,7 @@ window.addEventListener('keydown',e=>{
   if(k==='q')setTool('lasso');
   if(k==='w')setTool('wand');
   if(k==='t'&&!e.ctrlKey&&!e.metaKey)setTool('text');
+  if(k==='h')setTool('shade');
   if(k==='m')setTool('zoom');
   if(k==='l')setTool('line');
   if(k==='u'&&!e.shiftKey)setTool('rectDraw');
@@ -2180,6 +2429,16 @@ function renderCustomPalette(){
     if(k===bgKey)sw.classList.add('selBg');
     sw.addEventListener('click',()=>setFg(e.r,e.g,e.b,e.a));
     sw.addEventListener('contextmenu',ev=>{ev.preventDefault();setBg(e.r,e.g,e.b,e.a);});
+    const badge=document.createElement('div');
+    badge.className='psw-ramp-badge'+(S.shadeRampSelection.has(k)?' on':'');
+    badge.title='Include in Shade Ramp';
+    badge.onclick=ev=>{
+      ev.stopPropagation();
+      if(S.shadeRampSelection.has(k))S.shadeRampSelection.delete(k);
+      else S.shadeRampSelection.add(k);
+      badge.classList.toggle('on');
+    };
+    sw.appendChild(badge);
     grid.appendChild(sw);
   }
 }
@@ -2296,7 +2555,7 @@ area.addEventListener('mousedown',e=>{
   // always return focus to body so keyboard shortcuts work
   if(document.activeElement && document.activeElement!==document.body)
     document.activeElement.blur();
-  const isPan = e.button===1 || (e.button===2 && S.tool!=='zoom') || (e.button===0&&spaceDown);
+  const isPan = e.button===1 || (e.button===2 && S.tool!=='zoom' && S.tool!=='shade') || (e.button===0&&spaceDown);
   if(e.button===2 && S.tool==='zoom'){
     // RMB = zoom out toward cursor
     const rect=area.getBoundingClientRect();
@@ -2486,6 +2745,15 @@ function onPaintStart(e){
     }
     return;
   }
+  if(S.tool==='shade'){
+    if(!inBounds(x,y)||!S.shadeRamp.length)return;
+    snapshot();
+    S.drawing=true; S.drawBtn=e.button; S.lastPx=x; S.lastPy=y;
+    shadeStrokeStart();
+    shadeBrush(x,y,e.button===2?-1:1);
+    renderMain();
+    return;
+  }
   if(S.tool==='stamp'){
     if(!customBrush||!inBounds(x,y))return;
     snapshot();
@@ -2499,7 +2767,7 @@ function onPaintStart(e){
   snapshot();
   if(S.tool==='pencilPP'){
     ppReset();
-    ppState.prevX=x; ppState.prevY=y;
+    ppHistory.push({x,y});
     if(inBounds(x,y)) setPx(x,y,...col);
   } else {
     paintAt(x,y,col);
@@ -2576,6 +2844,23 @@ function onPaintMove(e){
   const sz=S.brushSize||1;
   const er=S.tool==='eraser';
 
+  if(S.tool==='shade'){
+    const dir=S.drawBtn===2?-1:1;
+    let x0=S.lastPx,y0=S.lastPy,x1=x,y1=y;
+    let dxs=Math.abs(x1-x0),dys=Math.abs(y1-y0);
+    let sxs=x0<x1?1:-1,sys=y0<y1?1:-1,errs=dxs-dys;
+    while(true){
+      shadeBrush(x0,y0,dir);
+      if(x0===x1&&y0===y1)break;
+      const e2s=2*errs;
+      if(e2s>-dys){errs-=dys;x0+=sxs;}
+      if(e2s< dxs){errs+=dxs;y0+=sys;}
+    }
+    S.lastPx=x;S.lastPy=y;
+    renderMain();
+    return;
+  }
+
   if(S.tool==='pencilPP'){
     // walk Bresenham step by step, applying ppPlot at each pixel
     const rgba=er?[0,0,0,0]:col;
@@ -2584,12 +2869,13 @@ function onPaintMove(e){
     let x0=S.lastPx,y0=S.lastPy,x1=x,y1=y;
     let dx=Math.abs(x1-x0),dy=Math.abs(y1-y0);
     let sx=x0<x1?1:-1,sy=y0<y1?1:-1,err=dx-dy;
+    const lastTracked=ppHistory[ppHistory.length-1];
     // skip the first pixel (already drawn/tracked)
     while(true){
       const e2=2*err;
       if(e2>-dy){err-=dy;x0+=sx;}
       if(e2< dx){err+=dx;y0+=sy;}
-      if(x0===ppState.prevX&&y0===ppState.prevY) continue;
+      if(lastTracked&&x0===lastTracked.x&&y0===lastTracked.y) continue;
       ppPlot(x0,y0,rgba,eraseWith);
       if(x0===x1&&y0===y1)break;
     }
@@ -2682,6 +2968,7 @@ function onPaintEnd(e){
 
   if(S.drawing){
     S.drawing=false;
+    shadeStrokeEnd();
     buildPalette();
   }
 }
@@ -3993,6 +4280,115 @@ function rasterizeText(text,startX,startY,scale,rgba){
   const font=$('#textFont')?.value||'pixel5x7';
   if(font==='pixel5x7') rasterizeTextPixelFont(text,startX,startY,scale,rgba);
   else rasterizeTextSystemFont(text,startX,startY,scale,font,rgba);
+}
+
+// ── Shading Ink ─────────────────────────────────────────────────────────────
+function renderShadeRampPreview(){
+  const wrap=$('#shadeRampPreview'); if(!wrap)return;
+  wrap.innerHTML='';
+  if(!S.shadeRamp.length){
+    wrap.innerHTML='<span style="font-size:10px;color:var(--dim);opacity:.6;">No ramp set \u2014 sort the palette, then click above</span>';
+    return;
+  }
+  S.shadeRamp.forEach((c,i)=>{
+    const chip=document.createElement('div');
+    chip.className='ramp-chip';
+    if(c.a>0) chip.style.background=`rgba(${c.r},${c.g},${c.b},${c.a/255})`;
+    chip.title=`#${i+1}: rgba(${c.r},${c.g},${c.b},${c.a})`;
+    const idx=document.createElement('span'); idx.className='ramp-idx'; idx.textContent=i+1;
+    const xBtn=document.createElement('span'); xBtn.className='ramp-x'; xBtn.textContent='\u00d7';
+    xBtn.title='Remove from ramp';
+    xBtn.onclick=e=>{e.stopPropagation(); S.shadeRamp.splice(i,1); renderShadeRampPreview();};
+    chip.append(idx,xBtn);
+    wrap.appendChild(chip);
+  });
+}
+
+// ── Help window ──────────────────────────────────────────────────────────
+let helpOpen=false;
+$('#btnHelp').onclick=()=>{
+  helpOpen=!helpOpen;
+  $('#helpWin').style.display=helpOpen?'block':'none';
+  $('#btnHelp').classList.toggle('active',helpOpen);
+};
+$('#helpWinClose').onclick=()=>{
+  helpOpen=false;
+  $('#helpWin').style.display='none';
+  $('#btnHelp').classList.remove('active');
+};
+(()=>{
+  const win=$('#helpWin'),bar=$('#helpWinBar');
+  let drag=false,dx=0,dy=0;
+  bar.addEventListener('mousedown',e=>{
+    if(e.target.id==='helpWinClose')return;
+    drag=true;
+    const r=win.getBoundingClientRect();
+    dx=e.clientX-r.left;dy=e.clientY-r.top;
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    win.style.left=(e.clientX-dx)+'px';
+    win.style.top=(e.clientY-dy)+'px';
+  });
+  window.addEventListener('mouseup',()=>{drag=false;});
+})();
+
+$('#btnUseShadeRamp').onclick=()=>{
+  const selected=S.palette.filter(c=>S.shadeRampSelection.has(keyOf(c.r,c.g,c.b,c.a)));
+  const source=selected.length?selected:S.palette;
+  S.shadeRamp=source.map(c=>({r:c.r,g:c.g,b:c.b,a:c.a}));
+  renderShadeRampPreview();
+  showToast('Shade ramp set: '+S.shadeRamp.length+' colors'+(selected.length?' (selected)':' (full palette)'));
+};
+
+function shadeRampIndexOf(r,g,b,a){
+  for(let i=0;i<S.shadeRamp.length;i++){
+    const c=S.shadeRamp[i];
+    if(c.r===r&&c.g===g&&c.b===b&&c.a===a) return i;
+  }
+  return -1;
+}
+
+// Shift one pixel to the next/previous ramp colour (clamped at the ends).
+// dir=+1 lighter/next, dir=-1 darker/previous. No-op if the pixel's colour
+// isn't an exact match in the ramp — safe to drag over unrelated colours.
+// tracks which pixels have already been shifted during the CURRENT stroke
+// (mousedown→mouseup) so a slow or overlapping drag doesn't shift the same
+// pixel multiple ramp-steps in one go
+let shadeStrokeMask=null;
+
+function shadeStrokeStart(){
+  shadeStrokeMask=S.imgData?new Uint8Array(S.w*S.h):null;
+}
+function shadeStrokeEnd(){
+  shadeStrokeMask=null;
+}
+
+function shadePixelAt(x,y,dir){
+  if(!inBounds(x,y)||!S.shadeRamp.length)return;
+  if(shadeStrokeMask){
+    const mi=y*S.w+x;
+    if(shadeStrokeMask[mi])return; // already shifted this pixel during this stroke
+    shadeStrokeMask[mi]=1;
+  }
+  const[r,g,b,a]=getPx(x,y);
+  const idx=shadeRampIndexOf(r,g,b,a);
+  if(idx<0)return;
+  const next=clamp(idx+dir,0,S.shadeRamp.length-1);
+  if(next===idx)return;
+  const c=S.shadeRamp[next];
+  setPx(x,y,c.r,c.g,c.b,c.a);
+}
+
+function shadeBrush(cx,cy,dir){
+  const size=S.brushSize||1, shape=S.brushShape||'square';
+  if(size<=1){ shadePixelAt(cx,cy,dir); return; }
+  const r=Math.floor((size-1)/2);
+  for(let dy=-r;dy<=size-1-r;dy++) for(let dx=-r;dx<=size-1-r;dx++){
+    if(shape==='circle'&&dx*dx+dy*dy>r*r)continue;
+    shadePixelAt(cx+dx,cy+dy,dir);
+  }
 }
 
 // ── CCL engine ─────────────────────────────────────────────────────────────
