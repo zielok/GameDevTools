@@ -165,7 +165,10 @@
       <label class="row"><span>Detection threshold</span>
         <input type="range" id="edgeSensitivity" min="20" max="200" value="80">
       </label>
-      <div class="hint">Detects sharp edges (outlines, small details) and blocks dithering on them, so thin lines and details don't blur into "noise". Lower value = detects more edges.</div>
+      <div class="hint">Detects sharp edges — including hue-only boundaries with similar brightness (e.g. hair against sky), not just brightness jumps — and blocks dithering on them. Lower value = detects more edges.</div>
+
+      <label class="row" style="margin-top:8px;"><span>Fix anti-aliased edge fringing</span><input type="checkbox" id="edgeSnap" checked></label>
+      <div class="hint">On fully opaque source art (rendered scenes, not transparent sprites), smoothly anti-aliased boundaries between two colors (e.g. hair against sky) blend into muddy in-between pixels that can quantize to an unrelated stray color. This snaps those blend pixels to whichever clean neighboring color they're actually closest to, before matching against the palette — removes the fringe instead of just hiding it. Requires "Protect edges/details" above to be on.</div>
     </fieldset>
 
     <fieldset>
@@ -689,34 +692,90 @@
     return {i1:bestI, d1:Math.sqrt(bestD), i2:secondI, d2:Math.sqrt(secondD)};
   }
 
-  // Simple Sobel edge-magnitude map over source luminance. Used to suppress dithering
-  // on genuine sprite details (thin lines, eyes, trim) so they stay crisp instead of
-  // getting speckled — dithering is meant to smooth gradients, not blur intentional
-  // linework.
+  // Sobel edge-magnitude map, computed over full OKLab (lightness AND color), not just
+  // luminance. A luminance-only Sobel is blind to a whole class of real boundaries: warm
+  // foreground colors (hair, ground, wood) against a similarly-bright cool sky/background
+  // have almost no luminance jump at the seam, so a luma-only detector sees a flat area
+  // there and lets dithering run wild on it — exactly the "hair against blue sky" fringing
+  // artifact. Including the OKLab a/b (hue/chroma) gradient catches hue-only transitions
+  // that luminance alone would miss entirely.
   function computeEdgeMask(sd, w, h, alphaThresh, threshold){
-    const lum = new Float32Array(w*h);
-    for(let i=0;i<w*h;i++){
+    const n = w*h;
+    const Lc = new Float32Array(n), Ac = new Float32Array(n), Bc = new Float32Array(n);
+    for(let i=0;i<n;i++){
       const idx = i*4;
-      lum[i] = sd[idx+3] < alphaThresh ? 0 : (0.2126*sd[idx] + 0.7152*sd[idx+1] + 0.0722*sd[idx+2]);
+      if(sd[idx+3] < alphaThresh) continue; // stays 0,0,0 — flat/transparent
+      const lab = rgbToOklab([sd[idx], sd[idx+1], sd[idx+2]]);
+      Lc[i] = lab[0]*255; Ac[i] = lab[1]*255; Bc[i] = lab[2]*255; // rescaled to roughly the
+                                                                    // same numeric range the
+                                                                    // old luminance-only
+                                                                    // threshold was tuned for
     }
     const gxK = [-1,0,1, -2,0,2, -1,0,1];
     const gyK = [-1,-2,-1, 0,0,0, 1,2,1];
-    const edge = new Uint8Array(w*h);
+    const edge = new Uint8Array(n);
     for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
-        let gx=0, gy=0, k=0;
+        let gxL=0, gyL=0, gxA=0, gyA=0, gxB=0, gyB=0, k=0;
         for(let dy=-1; dy<=1; dy++){
           for(let dx=-1; dx<=1; dx++){
             const nx = Math.min(w-1, Math.max(0, x+dx));
             const ny = Math.min(h-1, Math.max(0, y+dy));
-            const v = lum[ny*w+nx];
-            gx += v*gxK[k]; gy += v*gyK[k]; k++;
+            const p = ny*w+nx;
+            gxL += Lc[p]*gxK[k]; gyL += Lc[p]*gyK[k];
+            gxA += Ac[p]*gxK[k]; gyA += Ac[p]*gyK[k];
+            gxB += Bc[p]*gxK[k]; gyB += Bc[p]*gyK[k];
+            k++;
           }
         }
-        edge[y*w+x] = Math.sqrt(gx*gx + gy*gy) > threshold ? 1 : 0;
+        const mag = Math.sqrt(gxL*gxL+gyL*gyL + gxA*gxA+gyA*gyA + gxB*gxB+gyB*gyB);
+        edge[y*w+x] = mag > threshold ? 1 : 0;
       }
     }
     return edge;
+  }
+
+  // Fixes "muddy anti-aliased edge" fringing on FULLY OPAQUE source art (rendered scenes,
+  // painted illustrations — not sprites with real transparency, which decontaminateEdges
+  // already handles). Along any smoothly-rendered boundary between two flat-ish colors
+  // (e.g. brown hair against blue sky), the original renderer blends them together over a
+  // few pixels. Each of those blend pixels is neither color — and when matched against the
+  // WHOLE palette independently, it can land on some unrelated color that merely happens to
+  // be numerically closest to the blend (a muddy gray/purple, say), producing a visible
+  // fringe along the edge that has nothing to do with either side. This snaps every pixel
+  // flagged by the edge mask to whichever nearby NON-edge ("clean", unambiguous) neighbor
+  // color it's actually closest to in OKLab — so it quantizes as a normal member of one
+  // side or the other, instead of independently drifting to a third, unrelated palette entry.
+  function snapAntiAliasedEdges(sd, w, h, edgeMask, alphaThresh){
+    const out = sd.slice();
+    const R = 2;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx = (y*w+x)*4;
+        if(sd[idx+3] < alphaThresh) continue;
+        if(!edgeMask[y*w+x]) continue; // only touch flagged transition pixels
+        const myLab = rgbToOklab([sd[idx], sd[idx+1], sd[idx+2]]);
+        let bestDist = Infinity, bestColor = null;
+        for(let dy=-R; dy<=R; dy++){
+          for(let dx=-R; dx<=R; dx++){
+            if(dx===0 && dy===0) continue;
+            const nx=x+dx, ny=y+dy;
+            if(nx<0||ny<0||nx>=w||ny>=h) continue;
+            const nIdx = (ny*w+nx)*4;
+            if(sd[nIdx+3] < alphaThresh) continue;
+            if(edgeMask[ny*w+nx]) continue; // only snap toward "clean" (non-edge) neighbors
+            const nRgb = [sd[nIdx], sd[nIdx+1], sd[nIdx+2]];
+            const nLab = rgbToOklab(nRgb);
+            const d = (myLab[0]-nLab[0])**2 + (myLab[1]-nLab[1])**2 + (myLab[2]-nLab[2])**2;
+            if(d < bestDist){ bestDist = d; bestColor = nRgb; }
+          }
+        }
+        if(bestColor){
+          out[idx]=bestColor[0]; out[idx+1]=bestColor[1]; out[idx+2]=bestColor[2];
+        }
+      }
+    }
+    return out;
   }
 
   // Same idea as computeEdgeMask, but instead of a binary "is this an edge" flag, returns
@@ -1166,6 +1225,10 @@
 
     const edgeMask = opts.edgeProtectOn ? computeEdgeMask(sd, w, h, opts.alphaThresh, opts.edgeSensitivity) : null;
 
+    if(edgeMask && opts.edgeSnapOn){
+      sd = snapAntiAliasedEdges(sd, w, h, edgeMask, opts.alphaThresh);
+    }
+
     // Relaxation's 4-factor scoring (color/lightness/neighbor/gradient) inherently needs a
     // perceptual L/a/b split, so it always works in OKLab internally — regardless of the
     // "Color matching" RGB/OKLab toggle above (that toggle only affects the plain
@@ -1261,7 +1324,8 @@
           shadowThresh: parseInt(el('shadowThresh').value,10) / 100,
           highlightThresh: parseInt(el('highlightThresh').value,10) / 100,
           edgeProtectOn: el('edgeProtect').checked,
-          edgeSensitivity: parseInt(el('edgeSensitivity').value,10)
+          edgeSensitivity: parseInt(el('edgeSensitivity').value,10),
+          edgeSnapOn: el('edgeSnap').checked
         };
         outputFrames = frames.map(fr => ({
           name: fr.name.replace(/\.png$/i,'') + '.png',
