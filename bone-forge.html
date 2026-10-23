@@ -696,10 +696,11 @@ function interpBone(id,frame){
   return{angle:lerpAng(prev.angle,next.angle,t),x:lerp(prev.x,next.x,t),y:lerp(prev.y,next.y,t)};
 }
 
-// setInterp -- set a transform property at current frame (creates keyframe if animating)
+// setInterp -- set a transform property at current frame (creates keyframe if animating).
+// Does NOT push undo: callers push once per gesture (drag, IK drag, field edit),
+// otherwise every mousemove would flood the 50-step history.
 function setInterp(prop,val){
   const b=getBone(S.selBone);if(!b)return;
-  pushUndo();
   if(S.anim){
     let kf=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
     if(!kf){const cur=interpBone(b.id,S.frame);kf={frame:S.frame,boneId:b.id,...cur};S.anim.keyframes.push(kf);}
@@ -1167,13 +1168,26 @@ function renderProps(){
     <button id="p-del" class="danger">✕ Delete</button>
   </div>`;
 
+  // one undo step per focus session of a field, not one per keystroke
+  const undoOnce=el=>{let done=false;el.addEventListener('focus',()=>{done=false;});return()=>{if(!done){pushUndo();done=true;}};};
   $('#p-nm').oninput=e=>{bone.name=e.target.value;renderBoneTree();};
-  $('#p-ln').oninput=e=>{bone.length=Math.max(1,+e.target.value);renderVP();};
+  const lnUndo=undoOnce($('#p-ln'));
+  $('#p-ln').oninput=e=>{
+    lnUndo();
+    // the tip is defined by tipDX/tipDY, so Length rescales that offset (direction kept)
+    const len=Math.max(1,+e.target.value||1);
+    const dx=bone.tipDX??bone.length, dy=bone.tipDY??0, cur=Math.hypot(dx,dy);
+    if(cur>1e-6){bone.tipDX=dx*len/cur;bone.tipDY=dy*len/cur;}else{bone.tipDX=len;bone.tipDY=0;}
+    bone.length=len;
+    renderVP();
+  };
   if(!isChild){
-    $('#p-x').oninput=e=>setInterp('x',+e.target.value);
-    $('#p-y').oninput=e=>setInterp('y',+e.target.value);
+    const xUndo=undoOnce($('#p-x')), yUndo=undoOnce($('#p-y'));
+    $('#p-x').oninput=e=>{xUndo();setInterp('x',+e.target.value);};
+    $('#p-y').oninput=e=>{yUndo();setInterp('y',+e.target.value);};
   }
-  $('#p-a').oninput=e=>setInterp('angle',+e.target.value);
+  const aUndo=undoOnce($('#p-a'));
+  $('#p-a').oninput=e=>{aUndo();setInterp('angle',+e.target.value);};
   $('#p-sp').onchange=e=>{
     bone.spriteId=e.target.value?parseInt(e.target.value):null;
     if(bone.spriteId!=null){
@@ -1498,6 +1512,7 @@ $('#tl-canvas').addEventListener('mousemove',e=>{
   const{cx}=tlCoords(e);
   const deltaFrames=Math.round((cx-S.tlDrag.startCX)/S.tlZoom);
   if(deltaFrames===0)return;
+  if(!S.tlDrag.undoPushed){pushUndo();S.tlDrag.undoPushed=true;}
   // move all selected keyframes
   S.tlDrag.keys.forEach(({kf,origFrame})=>{
     const nf=clamp(origFrame+deltaFrames,0,S.anim.frameCount-1);
@@ -1512,7 +1527,6 @@ $('#tl-canvas').addEventListener('mousemove',e=>{
 
 $('#tl-canvas').addEventListener('mouseup',e=>{
   if(S.tlDrag){
-    pushUndo();  // save after drag complete
     S.tlDrag=null;
     renderTL();
   }
@@ -1543,6 +1557,7 @@ vpC.addEventListener('mousedown',e=>{
     if(hit){
       S.selBone=hit.id;
       S.ikDrag={chain:ikChain(hit), wx, wy};
+      pushUndo();
       solveIK(S.ikDrag.chain,wx,wy);
       renderBoneTree();renderProps();renderVP();renderTL();
     }
@@ -1657,6 +1672,8 @@ vpC.addEventListener('mousemove',e=>{
   if(S.drag){
     const{bone,type,wx0,wy0,oa,ox,oy}=S.drag;
     const frame=S.frame;
+    const willChange=(type==='root'&&bone.parentId==null)||type==='tip';
+    if(willChange&&!S.drag.undoPushed){pushUndo();S.drag.undoPushed=true;}
     if(type==='root'&&bone.parentId==null){
       setInterp('x',ox+(wx-wx0));setInterp('y',oy+(wy-wy0));
     }
@@ -1778,6 +1795,7 @@ $('#btn-copypose').onclick=()=>{
 $('#btn-pastepose').onclick=()=>{
   if(!S.copiedPose){setstatus('Nothing copied');return;}
   if(!S.anim){setstatus('No animation');return;}
+  pushUndo();
   S.copiedPose.forEach(cp=>{
     const b=getBone(cp.boneId);if(!b)return;
     const prev=S.selBone; S.selBone=b.id;

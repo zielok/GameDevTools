@@ -819,7 +819,7 @@ const S={
   fg:[0,0,0,255],bg:[255,255,255,255],palette:[],
   panning:false,panX:0,panY:0,panOx:0,panOy:0,
   drawing:false,drawBtn:0,lastPx:-1,lastPy:-1,
-  undo:[],undoIdx:-1,undoMax:50,
+  undo:[],redo:[],undoMax:50,
   playing:false,playTimer:null,onionPrev:40,onionNext:20,
   tileMode:false,symMode:'none',
   tags:[],frameCompact:false,tagFilter:null,
@@ -851,7 +851,7 @@ function initProject(w,h){
   S.activeFrame=0; S.activeLayer=0;
   S.imgData=S.frames[0].cells[0];
   S.sel=null;S.selData=null;
-  S.undo=[];S.undoIdx=-1;
+  resetHistory();
   S.tags=[];S.tagFilter=null;
   renderLayerList();
   renderFrameStrip();
@@ -865,7 +865,7 @@ function importIntoProject(imgData,w,h){
   S.activeFrame=0; S.activeLayer=0;
   S.imgData=S.frames[0].cells[0];
   S.sel=null;S.selData=null;
-  S.undo=[];S.undoIdx=-1;
+  resetHistory();
   S.tags=[];S.tagFilter=null;
   renderLayerList();
   renderFrameStrip();
@@ -953,45 +953,101 @@ function renderMain(){
   if(typeof refLoaded!=='undefined'&&refLoaded) positionRef();
 }
 
-// ── Undo: snapshot ALL layer cells of active frame ─────────────────────────
-function snapshot(){
-  if(!S.frames.length)return;
-  commitSel();
-  S.undo.splice(S.undoIdx+1);
-  const snap={
-    frame:S.activeFrame,
-    layer:S.activeLayer,
-    cells:S.frames[S.activeFrame].cells.map(c=>
-      new ImageData(new Uint8ClampedArray(c.data),S.w,S.h)
-    )
+// ── Undo: full-document snapshots ──────────────────────────────────────────
+// Each history entry captures the whole document (size, layers, frames, tags),
+// so layer/frame operations, transforms and resizes undo correctly.
+// Cell pixels are stored as frozen copies; a cell unchanged since its last
+// capture reuses its previous copy, so memory grows only with edited cells.
+let frozenOf=new WeakMap(); // live ImageData -> frozen Uint8ClampedArray
+
+function sameBytes(a,b){
+  if(a.length!==b.length)return false;
+  const a32=new Uint32Array(a.buffer,a.byteOffset,a.length>>2);
+  const b32=new Uint32Array(b.buffer,b.byteOffset,b.length>>2);
+  for(let i=0;i<a32.length;i++)if(a32[i]!==b32[i])return false;
+  return true;
+}
+function freezeCell(cell){
+  const prev=frozenOf.get(cell);
+  if(prev&&sameBytes(prev,cell.data))return prev;
+  const copy=new Uint8ClampedArray(cell.data);
+  frozenOf.set(cell,copy);
+  return copy;
+}
+function captureState(){
+  return{
+    w:S.w,h:S.h,
+    layers:S.layers.map(l=>({...l})),
+    frames:S.frames.map(f=>({duration:f.duration,cells:f.cells.map(freezeCell)})),
+    tags:S.tags.map(t=>({...t})),
+    activeFrame:S.activeFrame,activeLayer:S.activeLayer,
   };
-  S.undo.push(snap);
+}
+function restoreState(st){
+  const sizeChanged=st.w!==S.w||st.h!==S.h;
+  S.w=st.w;S.h=st.h;
+  S.layers=st.layers.map(l=>({...l}));
+  S.frames=st.frames.map(f=>({duration:f.duration,cells:f.cells.map(px=>{
+    const cell=new ImageData(new Uint8ClampedArray(px),st.w,st.h);
+    frozenOf.set(cell,px);
+    return cell;
+  })}));
+  S.tags=st.tags.map(t=>({...t}));
+  S.activeFrame=Math.min(st.activeFrame,S.frames.length-1);
+  S.activeLayer=Math.min(st.activeLayer,S.layers.length-1);
+  syncImgData();
+  if(sizeChanged){
+    resizeCanvases();updateGrid();
+    $('#fileMeta').textContent=S.fileName+' — '+S.w+'\xd7'+S.h;
+  }
+  renderLayerList();renderFrameStrip();renderTagsBar();renderMain();
+}
+
+// Cheap document equality (ignores which frame/layer is active):
+// unchanged cells share the same frozen copy.
+function sameState(a,b){
+  return a.w===b.w&&a.h===b.h&&
+    a.frames.length===b.frames.length&&
+    a.frames.every((f,i)=>f.duration===b.frames[i].duration&&f.cells.length===b.frames[i].cells.length&&
+      f.cells.every((c,j)=>c===b.frames[i].cells[j]))&&
+    JSON.stringify(a.layers)===JSON.stringify(b.layers)&&JSON.stringify(a.tags)===JSON.stringify(b.tags);
+}
+
+// Push the current state as an undo checkpoint (no selection commit).
+// Skipped when nothing changed since the last checkpoint (e.g. an action
+// that turned out to be a no-op), so undo never wastes a step.
+function pushHistory(){
+  const st=captureState(), last=S.undo[S.undo.length-1];
+  if(!last||!sameState(last,st)) S.undo.push(st);
   if(S.undo.length>S.undoMax)S.undo.shift();
-  S.undoIdx=S.undo.length-1;
+  S.redo.length=0;
+  updateUndoButtons();
+}
+function resetHistory(){
+  S.undo=[];S.redo=[];frozenOf=new WeakMap();
   updateUndoButtons();
 }
 
-function undo(){
-  if(S.undoIdx<=0)return;
-  S.undoIdx--;
-  const snap=S.undo[S.undoIdx];
-  S.frames[snap.frame].cells=snap.cells.map(c=>
-    new ImageData(new Uint8ClampedArray(c.data),S.w,S.h)
-  );
-  S.activeFrame=snap.frame; S.activeLayer=snap.layer;
-  syncImgData(); commitSel(); renderMain(); updateUndoButtons();
+// Record the document state BEFORE a change — callers mutate right after.
+function snapshot(){
+  if(!S.frames.length)return;
+  commitSel();
+  pushHistory();
 }
 
-function redo(){
-  if(S.undoIdx>=S.undo.length-1)return;
-  S.undoIdx++;
-  const snap=S.undo[S.undoIdx];
-  S.frames[snap.frame].cells=snap.cells.map(c=>
-    new ImageData(new Uint8ClampedArray(c.data),S.w,S.h)
-  );
-  S.activeFrame=snap.frame; S.activeLayer=snap.layer;
-  syncImgData(); commitSel(); renderMain(); updateUndoButtons();
+// Move one step between stacks. Checkpoints identical to the current document
+// (recorded before an action that turned out to be a no-op) are dropped,
+// so a single undo always reverts a visible change.
+function stepHistory(from,to){
+  if(!from.length)return;
+  commitSel();
+  const cur=captureState();
+  while(from.length&&sameState(from[from.length-1],cur))from.pop();
+  if(from.length){to.push(cur);restoreState(from.pop());}
+  updateUndoButtons();
 }
+function undo(){ stepHistory(S.undo,S.redo); }
+function redo(){ stepHistory(S.redo,S.undo); }
 
 // getPx/setPx always work on active cell (S.imgData)
 function getPx(x,y){
@@ -1623,8 +1679,8 @@ function updateGridPos(){
 
 
 function updateUndoButtons(){
-  $('#btnUndo').disabled=S.undoIdx<=0;
-  $('#btnRedo').disabled=S.undoIdx>=S.undo.length-1;
+  $('#btnUndo').disabled=!S.undo.length;
+  $('#btnRedo').disabled=!S.redo.length;
 }
 
 // ── Colour / pixel helpers ────────────────────────────────────────────────
@@ -2010,14 +2066,7 @@ function doLift(){
   if(!S.sel||S.selData)return;
   // push an undo checkpoint WITHOUT calling commitSel (that would destroy
   // the very selection we're about to lift, since selData is still null here)
-  S.undo.splice(S.undoIdx+1);
-  S.undo.push({
-    frame:S.activeFrame, layer:S.activeLayer,
-    cells:S.frames[S.activeFrame].cells.map(c=>new ImageData(new Uint8ClampedArray(c.data),S.w,S.h))
-  });
-  if(S.undo.length>S.undoMax)S.undo.shift();
-  S.undoIdx=S.undo.length-1;
-  updateUndoButtons();
+  pushHistory();
   const{x,y,w,h}=S.sel;
   const layerCell=S.frames[S.activeFrame].cells[S.selLayer!==undefined?S.selLayer:S.activeLayer];
   const src=layerCell.data;
@@ -2136,7 +2185,7 @@ $('#newFileGo').onclick=()=>{
   z=clamp(z,1,32);S.zoom=z;
   $('#zoomSlider').value=z;$('#zoomLabel').textContent=z+'x';$('#stZoom').textContent=z+'x';
   S.ox=Math.round((az-w*z)/2);S.oy=Math.round((ah2-h*z)/2);
-  resizeCanvases();snapshot();renderMain();
+  resizeCanvases();renderMain();
   buildPalette();
   $('#btnSave').disabled=false;
   $('#btnPreview').disabled=false;
@@ -2168,7 +2217,7 @@ function initImage(w,h,srcImg){
   z=clamp(z,1,32);S.zoom=z;
   $('#zoomSlider').value=z;$('#zoomLabel').textContent=z+'×';$('#stZoom').textContent=z+'×';
   S.ox=Math.round((az-w*z)/2);S.oy=Math.round((ah2-h*z)/2);
-  resizeCanvases();snapshot();renderMain();
+  resizeCanvases();renderMain();
   if(srcImg) buildPaletteFromImage(); else buildPalette();
   $('#btnSave').disabled=false;
   $('#btnPreview').disabled=false;
@@ -2286,7 +2335,7 @@ window.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&k==='x'){cutSelection();e.preventDefault();}
   if((e.ctrlKey||e.metaKey)&&k==='v'){pasteClipboard();e.preventDefault();}
   if((e.ctrlKey||e.metaKey)&&k==='a'){
-    if(S.imgData){commitSel();snapshot();liftSel(0,0,S.w,S.h);startAnts();renderMain();}
+    if(S.imgData){commitSel();liftSel(0,0,S.w,S.h);startAnts();renderMain();}
     e.preventDefault();
   }
   if((e.ctrlKey||e.metaKey)&&k==='d'){commitSel();renderMain();e.preventDefault();}
@@ -2893,7 +2942,7 @@ function onPaintEnd(e){
   if(S.tool==='rect'){
     S._rubberBand=null;
     if(S.selMoving){
-      S.selMoving=false;snapshot();
+      S.selMoving=false;commitSel();
     } else if(rectStart){
       const rx=Math.min(rectStart.x,x),ry=Math.min(rectStart.y,y);
       const rw=Math.abs(x-rectStart.x)+1,rh=Math.abs(y-rectStart.y)+1;
@@ -2938,7 +2987,7 @@ function onPaintEnd(e){
   }
 
   if(S.tool==='lasso'){
-    if(S.selMoving){S.selMoving=false;snapshot();renderMain();return;}
+    if(S.selMoving){S.selMoving=false;commitSel();renderMain();return;}
     if(lassoActive){
       lassoActive=false;
       lassoCombineMode=e.shiftKey?'add':(e.altKey?'sub':null);
@@ -3595,14 +3644,14 @@ $('#projIn').onchange=async e=>{
   S.tags=Array.isArray(proj.tags)?proj.tags:[]; // backward-compat: older .pfp files have no tags
   syncImgData();
   S.sel=null;S.selData=null;
-  S.undo=[];S.undoIdx=-1;
+  resetHistory();
   // fit zoom
   const az=area.clientWidth,ah2=area.clientHeight;
   let z=Math.floor(Math.min(az/S.w,ah2/S.h));
   z=clamp(z,1,32);S.zoom=z;
   $('#zoomSlider').value=z;$('#zoomLabel').textContent=z+'×';$('#stZoom').textContent=z+'×';
   S.ox=Math.round((az-S.w*z)/2);S.oy=Math.round((ah2-S.h*z)/2);
-  resizeCanvases();snapshot();renderMain();
+  resizeCanvases();renderMain();
   buildPaletteFromImage();
   renderLayerList();renderFrameStrip();
   $('#btnSave').disabled=false;
@@ -3662,6 +3711,7 @@ function cutSelection(){
 function pasteClipboard(){
   if(!clipboard)return;
   commitSel();
+  pushHistory(); // checkpoint before the pasted float lands on the layer
   // paste centred on canvas
   const px=Math.round((S.w-clipboard.w)/2), py=Math.round((S.h-clipboard.h)/2);
   const w=clipboard.w,h=clipboard.h;

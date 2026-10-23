@@ -534,18 +534,22 @@ function updateUndoButtons(){
 // ── Keyboard ──────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
-  if (e.key==='v'||e.key==='V') setMode('select');
-  if (e.key==='a'||e.key==='A') setMode('add');
-  if (e.key==='d'||e.key==='D') setMode('deform');
-  if ((e.ctrlKey||e.metaKey)&&e.key==='z') { e.preventDefault(); undo(); return; }
-  if ((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))) { e.preventDefault(); redo(); return; }
-  if (e.key==='k'||e.key==='K') { if(e.shiftKey) removeKeyframe(); else addKeyframe(); }
+  const k = e.key.toLowerCase();
+  if (e.ctrlKey||e.metaKey) {
+    if (k==='z'&&!e.shiftKey) { e.preventDefault(); undo(); }
+    else if (k==='y'||(k==='z'&&e.shiftKey)) { e.preventDefault(); redo(); }
+    else if (k==='a') { e.preventDefault(); selIdx=new Set(verts.map((_,i)=>i)); render(); updateUI(); }
+    return;
+  }
+  if (k==='v') setMode('select');
+  if (k==='a') setMode('add');
+  if (k==='d') setMode('deform');
+  if (k==='k') { if(e.shiftKey) removeKeyframe(); else addKeyframe(); }
   if (e.key===' ') { e.preventDefault(); togglePlay(); }
   if (e.key==='ArrowRight') { e.preventDefault(); stepFrame(1); }
   if (e.key==='ArrowLeft')  { e.preventDefault(); stepFrame(-1); }
   if (e.key==='Delete'||e.key==='Backspace') deleteSelected();
   if (e.key==='Escape') { selIdx.clear(); render(); updateUI(); }
-  if ((e.ctrlKey||e.metaKey)&&e.key==='a') { e.preventDefault(); selIdx=new Set(verts.map((_,i)=>i)); render(); updateUI(); }
 });
 
 // ── Mode ──────────────────────────────────────────────────────
@@ -703,6 +707,11 @@ function onMU(){
 // ── Vertex ops ────────────────────────────────────────────────
 function addVertex(sx,sy){
   verts.push({x:sx,y:sy,ox:sx,oy:sy});
+  for(const [f,pos] of keyframes){
+    const grown=new Float32Array(pos.length+2);
+    grown.set(pos); grown[pos.length]=sx; grown[pos.length+1]=sy;
+    keyframes.set(f,grown);
+  }
   triangulate();
 }
 function deleteSelected(){
@@ -741,7 +750,7 @@ function deleteSelected(){
 // ── Triangulation (Bowyer–Watson Delaunay) ────────────────────
 function triangulate(){
   if(verts.length<3){tris=[];edges=new Set();render();updateUI();return;}
-  const pts=verts.map(v=>[v.x,v.y]);
+  const pts=verts.map(v=>[v.ox,v.oy]); // rest pose — topology must not depend on the current deformation
   const n=pts.length;
   const minX=Math.min(...pts.map(p=>p[0]))-1, minY=Math.min(...pts.map(p=>p[1]))-1;
   const maxX=Math.max(...pts.map(p=>p[0]))+1, maxY=Math.max(...pts.map(p=>p[1]))+1;
@@ -1220,9 +1229,9 @@ function renderWarpedSprite(){
         const su = w0*sx0 + w1*sx1 + w2*sx2;
         const sv = w0*sy0 + w1*sy1 + w2*sy2;
 
-        // Nearest-neighbour source pixel
-        const sxi = Math.round(su) | 0;
-        const syi = Math.round(sv) | 0;
+        // Nearest-neighbour source pixel (floor: pixel centre px+0.5 → px)
+        const sxi = Math.floor(su);
+        const syi = Math.floor(sv);
         if(sxi<0||sxi>=W||syi<0||syi>=H) continue;
 
         // Copy RGBA directly — no blending whatsoever
@@ -1412,8 +1421,8 @@ async function runExport(){
           const w1=((dy2-dy0)*(pcx-dx2)+(dx0-dx2)*(pcy-dy2))*inv;
           const w2=1-w0-w1;
           if(w0<0||w1<0||w2<0) continue;
-          const sxi=Math.round(w0*sx0+w1*sx1+w2*sx2)|0;
-          const syi=Math.round(w0*sy0+w1*sy1+w2*sy2)|0;
+          const sxi=Math.floor(w0*sx0+w1*sx1+w2*sx2);
+          const syi=Math.floor(w0*sy0+w1*sy1+w2*sy2);
           if(sxi<0||sxi>=SW||syi<0||syi>=SH) continue;
           const si=(syi*SW+sxi)*4, di=(py*SW+px)*4;
           d[di]=src[si]; d[di+1]=src[si+1]; d[di+2]=src[si+2]; d[di+3]=src[si+3];

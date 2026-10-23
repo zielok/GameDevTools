@@ -508,6 +508,7 @@ function makeThumbnail(img) {
   const c = document.createElement('canvas');
   c.width = 36; c.height = 36;
   const cx = c.getContext('2d');
+  cx.imageSmoothingEnabled = false;
   const scale = Math.min(36/img.width, 36/img.height);
   const w = img.width*scale, h = img.height*scale;
   cx.drawImage(img, (36-w)/2, (36-h)/2, w, h);
@@ -703,7 +704,7 @@ function renderTimeline() {
       }
       block.style.left = (seg.startFrame * z) + 'px';
       block.style.width = (seg.frames.length * z) + 'px';
-      block.innerHTML = `<div class="seg-name">${seg.name}</div><div class="seg-info">${seg.frames.length}f · ${seg.blend}</div>`;
+      block.innerHTML = `<div class="seg-name">${escapeHtml(seg.name)}</div><div class="seg-info">${seg.frames.length}f · ${seg.blend}</div>`;
       block.addEventListener('click', e => { e.stopPropagation(); selectSegment(ti, si); });
       row.appendChild(block);
     }
@@ -770,7 +771,7 @@ function buildPropPanel() {
   propBody.innerHTML = `
     <div class="prop-row">
       <div class="prop-label">Name</div>
-      <input class="prop-input" id="p-name" value="${seg.name}">
+      <input class="prop-input" id="p-name" value="${escapeHtml(seg.name)}">
     </div>
     <div class="prop-row">
       <div class="prop-label">Start Frame</div>
@@ -857,7 +858,11 @@ function buildFramesList() {
   seg.frames.forEach((fr, i) => {
     const div = document.createElement('div');
     div.className = 'frame-thumb' + (state.selectedFrames.has(i) ? ' selected-frame' : '');
-    div.appendChild(fr.thumb.cloneNode(true)); // reuse thumb canvas
+    // cloneNode() would give a blank canvas — copy the cached thumbnail's pixels
+    const thumb = document.createElement('canvas');
+    thumb.width = fr.thumb.width; thumb.height = fr.thumb.height;
+    thumb.getContext('2d').drawImage(fr.thumb, 0, 0);
+    div.appendChild(thumb);
     const num = document.createElement('div');
     num.className = 'frame-num';
     num.textContent = i;
@@ -951,6 +956,12 @@ async function exportZip() {
   if (state.totalFrames < 1) { setStatus('Nothing to export'); return; }
 
   stopPlay();
+  // Ask for export scale — Cancel aborts the export
+  const scaleStr = prompt('Export scale factor (1 = original size):', '1');
+  if (scaleStr === null) { setStatus('Export cancelled'); return; }
+  const scale = parseFloat(scaleStr);
+  if (!(scale > 0)) { setStatus('Invalid export scale: ' + scaleStr); return; }
+
   const modal = document.getElementById('modal-overlay');
   const bar = document.getElementById('modal-bar');
   const mstatus = document.getElementById('modal-status');
@@ -959,16 +970,13 @@ async function exportZip() {
   mclose.style.display = 'none';
   bar.style.width = '0%';
 
-  // Ask for export scale
-  const scaleStr = prompt('Export scale factor (1 = original size):', '1');
-  const scale = parseFloat(scaleStr) || 1;
-
   const expW = Math.round(state.canvasW * scale);
   const expH = Math.round(state.canvasH * scale);
 
   const offscreen = document.createElement('canvas');
   offscreen.width = expW; offscreen.height = expH;
   const octx = offscreen.getContext('2d');
+  octx.imageSmoothingEnabled = false; // keep pixel art sharp when scaling
 
   const zipParts = [];
 
@@ -1094,6 +1102,10 @@ document.getElementById('modal-close').addEventListener('click', () => {
 // ═══════════════════════════════════════════════════════════════
 //  UTIL
 // ═══════════════════════════════════════════════════════════════
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function setStatus(msg) {
   statusEl.textContent = msg;
   console.log('[AnimForge]', msg);
