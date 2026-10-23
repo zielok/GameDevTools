@@ -2,10 +2,7 @@
 
 A collection of self-contained, browser-based tools for pixel art and 2D game development. Each tool is a single HTML file — no build step, no server. Just open the file in a modern browser.
 
-All tools work fully offline, with two exceptions:
-
-- **Sprite Forge** loads [JSZip](https://stuk.github.io/jszip/) 3.10.1 from cdnjs. It is needed to read ZIP input and to save the result, so this tool requires an internet connection.
-- **Particle Forge** loads its UI fonts (Space Grotesk, JetBrains Mono) from Google Fonts. Offline it falls back to system fonts and works normally.
+All tools work fully offline. The only network request is made by **Particle Forge**, which loads its UI fonts (Space Grotesk, JetBrains Mono) from Google Fonts; offline it falls back to system fonts and works normally.
 
 Designed for workflows compatible with engines like GameMaker, Phaser, and PixiJS.
 
@@ -36,7 +33,7 @@ A full-featured pixel art editor with layers and frame-based animation:
 
 ## Sprite Forge
 
-*Pixel art palette converter.* — `sprite-forge.html` (needs internet, see above)
+*Pixel art palette converter.* — `sprite-forge.html`
 
 Converts PNG animation frames to a target retro color palette:
 
@@ -46,7 +43,7 @@ Converts PNG animation frames to a target retro color palette:
 - Dithering: ordered (Bayer 2x2/4x4/8x8), checkerboard, blue noise (void-and-cluster), shadow/highlight-aware, with Sobel edge protection
 - Dither mask system that protects intentional dithering from cleanup passes
 - Artifact cleanup: alpha edge decontamination, despeckle, island removal (8-connected), hole filling
-- Batch processing via ZIP input/output
+- Batch processing via ZIP input/output (built-in ZIP reader/writer, stored and deflate input), with per-frame progress
 
 ---
 

@@ -355,7 +355,7 @@ label{color:var(--dim);font-size:13px;}
         <li><kbd>O</kbd> — Toggle Onion Skinning</li>
         <li><kbd>Space</kbd> — Play / Stop</li>
         <li><kbd>← →</kbd> — Previous / Next frame</li>
-        <li><kbd>Delete</kbd> — Delete selected bone (and its children)</li>
+        <li><kbd>Delete</kbd> / <kbd>Backspace</kbd> — Delete selected bone (and its children)</li>
         <li><kbd>Ctrl+Z</kbd> — Undo</li>
         <li><kbd>Ctrl+Y</kbd> / <kbd>Ctrl+Shift+Z</kbd> — Redo</li>
         <li><kbd>Ctrl+C</kbd> — Copy current pose</li>
@@ -1809,19 +1809,26 @@ $('#btn-pastepose').onclick=()=>{
 
 document.addEventListener('keydown',e=>{
   if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;
-  if(e.key==='v'||e.key==='V'){S.mode='sel';setModeBtns();}
-  if(e.key==='b'||e.key==='B'){S.mode='bone';setModeBtns();}
-  if(e.key==='i'||e.key==='I'){S.mode='ik';setModeBtns();}
-  if(e.key==='p'||e.key==='P'){S.mode='pan';setModeBtns();}
-  if(e.key==='o'||e.key==='O'){S.onion=!S.onion;setModeBtns();renderVP();}
+  const k=e.key.toLowerCase();
+  // Ctrl/Cmd shortcuts first — so e.g. Ctrl+V doesn't also switch to Select mode.
+  // e.key is uppercase while Shift is held (Ctrl+Shift+Z), hence the lowercase.
+  if(e.ctrlKey||e.metaKey){
+    if(k==='z'&&!e.shiftKey){e.preventDefault();undo();}
+    else if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();redo();}
+    else if(k==='c'){$('#btn-copypose').click();}
+    else if(k==='v'&&!e.shiftKey){e.preventDefault();$('#btn-pastepose').click();}
+    return;
+  }
+  if(k==='v'){S.mode='sel';setModeBtns();}
+  if(k==='b'){S.mode='bone';setModeBtns();}
+  if(k==='i'){S.mode='ik';setModeBtns();}
+  if(k==='p'){S.mode='pan';setModeBtns();}
+  if(k==='o'){S.onion=!S.onion;setModeBtns();renderVP();}
   if(e.key===' '){e.preventDefault();S.playing?stopPlay():startPlay();}
   if(e.key==='ArrowLeft'){S.frame=Math.max(0,S.frame-1);$('#tl-flbl').textContent=`Frame ${S.frame}`;renderVP();renderTL();renderProps();}
   if(e.key==='ArrowRight'){const mx=S.anim?S.anim.frameCount-1:0;S.frame=Math.min(mx,S.frame+1);$('#tl-flbl').textContent=`Frame ${S.frame}`;renderVP();renderTL();renderProps();}
-  if(e.key==='Delete'&&S.selBone!=null)deleteBone(S.selBone);
-  if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();}
-  if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();}
-  if((e.ctrlKey||e.metaKey)&&e.key==='c'){$('#btn-copypose').click();}
-  if((e.ctrlKey||e.metaKey)&&e.key==='v'&&!e.shiftKey){e.preventDefault();$('#btn-pastepose').click();}
+  // Mac keyboards send Backspace for the key labelled "delete"
+  if((e.key==='Delete'||e.key==='Backspace')&&S.selBone!=null){e.preventDefault();deleteBone(S.selBone);}
 });
 
 // -- BUTTONS -------------------------------------

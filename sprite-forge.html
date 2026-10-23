@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sprite Forge — pixel art palette converter</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --bg: #0e1210;
@@ -504,6 +503,82 @@
   function updateFpsLabel(){ el('fpsLabel').textContent = el('fpsRange').value + ' fps'; }
   updateFpsLabel();
 
+  // ---------- ZIP (no dependencies) ----------
+  // Reader: walks the central directory; supports stored and deflate entries
+  // (deflate via the browser's built-in DecompressionStream). Writer: stored
+  // entries only — PNGs are already compressed, deflating them again gains nothing.
+  const CRC_TABLE = (()=>{
+    const t = new Uint32Array(256);
+    for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1); t[n]=c>>>0; }
+    return t;
+  })();
+  function crc32(buf){
+    let c = 0xFFFFFFFF;
+    for(let i=0;i<buf.length;i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  async function inflateRaw(bytes){
+    if(typeof DecompressionStream === 'undefined') throw new Error('this browser cannot decompress ZIP files (no DecompressionStream support)');
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  // Returns [{name, read: async () => Uint8Array}]
+  async function readZip(file){
+    const data = new Uint8Array(await file.arrayBuffer());
+    const dv = new DataView(data.buffer);
+    let eocd = -1;
+    for(let i=data.length-22; i>=Math.max(0, data.length-22-65535); i--){
+      if(dv.getUint32(i,true) === 0x06054b50){ eocd = i; break; }
+    }
+    if(eocd < 0) throw new Error('not a valid ZIP file (end of central directory not found)');
+    const count = dv.getUint16(eocd+10,true);
+    let p = dv.getUint32(eocd+16,true);
+    if(count === 0xFFFF || p === 0xFFFFFFFF) throw new Error('ZIP64 archives are not supported');
+    const dec = new TextDecoder();
+    const entries = [];
+    for(let k=0;k<count;k++){
+      if(dv.getUint32(p,true) !== 0x02014b50) throw new Error('corrupted ZIP central directory');
+      const method = dv.getUint16(p+10,true), compSize = dv.getUint32(p+20,true);
+      const nameLen = dv.getUint16(p+28,true), extraLen = dv.getUint16(p+30,true), commentLen = dv.getUint16(p+32,true);
+      const localOff = dv.getUint32(p+42,true);
+      const name = dec.decode(data.subarray(p+46, p+46+nameLen));
+      entries.push({name, read: async ()=>{
+        if(dv.getUint32(localOff,true) !== 0x04034b50) throw new Error('bad local file header');
+        const start = localOff + 30 + dv.getUint16(localOff+26,true) + dv.getUint16(localOff+28,true);
+        const raw = data.subarray(start, start+compSize);
+        if(method === 0) return raw.slice();
+        if(method === 8) return inflateRaw(raw);
+        throw new Error('unsupported ZIP compression method ' + method);
+      }});
+      p += 46 + nameLen + extraLen + commentLen;
+    }
+    return entries;
+  }
+  // files: [{name, data: Uint8Array}] -> Blob (stored, no compression)
+  function buildZip(files){
+    const enc = new TextEncoder();
+    const parts = [], central = [];
+    let offset = 0;
+    for(const f of files){
+      const nameBytes = enc.encode(f.name), crc = crc32(f.data), size = f.data.length;
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0,0x04034b50,true); lh.setUint16(4,20,true); lh.setUint16(6,0x0800,true); // UTF-8 names
+      lh.setUint32(14,crc,true); lh.setUint32(18,size,true); lh.setUint32(22,size,true); lh.setUint16(26,nameBytes.length,true);
+      parts.push(new Uint8Array(lh.buffer), nameBytes, f.data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0,0x02014b50,true); ch.setUint16(4,20,true); ch.setUint16(6,20,true); ch.setUint16(8,0x0800,true);
+      ch.setUint32(16,crc,true); ch.setUint32(20,size,true); ch.setUint32(24,size,true); ch.setUint16(28,nameBytes.length,true);
+      ch.setUint32(42,offset,true);
+      central.push(new Uint8Array(ch.buffer), nameBytes);
+      offset += 30 + nameBytes.length + size;
+    }
+    const cdSize = central.reduce((n,b)=>n+b.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0,0x06054b50,true); end.setUint16(8,files.length,true); end.setUint16(10,files.length,true);
+    end.setUint32(12,cdSize,true); end.setUint32(16,offset,true);
+    return new Blob([...parts, ...central, new Uint8Array(end.buffer)], {type:'application/zip'});
+  }
+
   // ---------- Loading files ----------
   dropzone.addEventListener('click', ()=>fileInput.click());
   ['dragenter','dragover'].forEach(ev=>dropzone.addEventListener(ev, e=>{
@@ -526,19 +601,17 @@
     const files = Array.from(fileList);
     if(!files.length) return;
     setStatus('Loading…');
+    processRun++;
     frames = [];
     const diag = []; // diagnostic lines shown to the user if nothing matches
     try{
       for(const f of files){
         if(/\.zip$/i.test(f.name) || f.type === 'application/zip'){
-          const zip = await JSZip.loadAsync(f);
-          const allEntries = Object.values(zip.files);
+          const allEntries = await readZip(f);
 
           const pngEntries = allEntries.filter(e => {
             const name = (e.name || '').trim();
-            const isRealDir = name.endsWith('/'); // don't trust JSZip's computed e.dir alone — some
-                                                    // zip tools set external attributes incorrectly,
-                                                    // which makes JSZip flag real files as directories
+            const isRealDir = name.endsWith('/'); // directory entries end with "/"
             const isJunk = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$)/i.test(name) || name.split('/').pop().startsWith('._');
             return !isRealDir && !isJunk && /\.png$/i.test(name);
           });
@@ -548,7 +621,7 @@
             const sample = allEntries
               .filter(e => !(e.name||'').endsWith('/'))
               .slice(0, 15)
-              .map(e => `  • ${e.name}${e.dir ? '  [flagged as a folder]' : ''}`);
+              .map(e => `  • ${e.name}`);
             diag.push('ZIP contents (first entries):');
             diag.push(...(sample.length ? sample : ['  (the ZIP looks empty)']));
           } else {
@@ -562,10 +635,9 @@
 
           for(const entry of pngEntries){
             try{
-              const buf = await entry.async('arraybuffer');
-              // Force a correct image/png MIME type: JSZip doesn't always tag extracted
-              // blobs as image/png, and some browsers refuse to decode an <img> from a
-              // blob: URL whose declared type isn't a recognized image type.
+              const buf = await entry.read();
+              // Force a correct image/png MIME type: some browsers refuse to decode an
+              // <img> from a blob: URL whose declared type isn't a recognized image type.
               const blob = new Blob([buf], {type: 'image/png'});
               const img = await blobToImage(blob);
               frames.push({name: entry.name.split('/').pop(), img});
@@ -635,6 +707,7 @@
   }
 
   clearBtn.addEventListener('click', ()=>{
+    processRun++;
     frames = []; outputFrames = [];
     grid.innerHTML = '<div class="hint" style="padding:8px;">Load frames to see a preview here.</div>';
     el('gridHeader').style.display = 'none';
@@ -1294,11 +1367,17 @@
     }
   }
 
+  // Bumped by Clear / new file load so an in-flight processing run can tell it's stale.
+  let processRun = 0;
+  const nextPaint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+
   processBtn.addEventListener('click', ()=>{
     if(!frames.length) return;
     processBtn.disabled = true;
     setStatus('Processing frames…');
-    setTimeout(()=>{ // let UI update before heavy sync work
+    const run = ++processRun;
+    const srcFrames = frames;
+    setTimeout(async ()=>{ // let UI update before heavy work
       try{
         const opts = {
           palette: paletteRgb(paletteSelect.value),
@@ -1327,10 +1406,17 @@
           edgeSensitivity: parseInt(el('edgeSensitivity').value,10),
           edgeSnapOn: el('edgeSnap').checked
         };
-        outputFrames = frames.map(fr => ({
-          name: fr.name.replace(/\.png$/i,'') + '.png',
-          canvas: quantizeFrame(fr.img, opts)
-        }));
+        // one frame per task, yielding to the browser in between, so the page stays
+        // responsive and shows progress instead of freezing on large batches
+        const results = [];
+        for(let i=0;i<srcFrames.length;i++){
+          setStatus(`Processing frame ${i+1} / ${srcFrames.length}…`);
+          await nextPaint();
+          if(run !== processRun) return; // cleared or replaced meanwhile
+          const fr = srcFrames[i];
+          results.push({ name: fr.name.replace(/\.png$/i,'') + '.png', canvas: quantizeFrame(fr.img, opts) });
+        }
+        outputFrames = results;
         if(el('skipPreview').checked){
           frameCount.textContent = `${outputFrames.length} frames processed (preview skipped)`;
           grid.innerHTML = '<div class="hint" style="padding:8px;">Preview skipped. Click "Save ZIP" when ready.</div>';
@@ -1347,7 +1433,7 @@
         console.error(err);
         setStatus('Processing error: ' + err.message, true);
       }finally{
-        processBtn.disabled = false;
+        if(run === processRun) processBtn.disabled = frames.length === 0;
       }
     }, 30);
   });
@@ -1479,20 +1565,18 @@
   async function buildDownload(){
     downloadArea.innerHTML = '<span class="hint">Packing ZIP…</span>';
     try{
-      const zip = new JSZip();
-      let totalBytes = 0;
+      const files = [];
+      const usedNames = new Set();
       for(const fr of outputFrames){
         const blob = await new Promise(res => fr.canvas.toBlob(res, 'image/png'));
         if(!blob || blob.size === 0) throw new Error('Failed to encode frame ' + fr.name + ' (canvas returned an empty blob).');
-        totalBytes += blob.size;
-        zip.file(fr.name, blob);
+        // same file name from different ZIP folders → keep both instead of overwriting
+        let name = fr.name;
+        for(let n=2; usedNames.has(name); n++) name = fr.name.replace(/\.png$/i,'') + '_' + n + '.png';
+        usedNames.add(name);
+        files.push({name, data: new Uint8Array(await blob.arrayBuffer())});
       }
-      const zipBlob = await zip.generateAsync({type:'blob'});
-      if(!zipBlob || zipBlob.size < totalBytes * 0.5){
-        // sanity check: a valid zip of PNGs should be roughly as large as the sum of its parts
-        // (PNG is already compressed, so the zip won't shrink much — if it's far smaller, something went wrong)
-        console.warn('Zip size looks suspicious', zipBlob && zipBlob.size, 'vs frames total', totalBytes);
-      }
+      const zipBlob = buildZip(files);
       const {url} = triggerDownload(zipBlob, 'sprite-forge-output.zip');
 
       downloadArea.innerHTML = '';

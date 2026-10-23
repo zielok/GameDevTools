@@ -212,7 +212,7 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
   <button class="hbtn" id="btnSave" disabled>Save PNG</button>
   <button class="hbtn" id="btnFlipH"  disabled title="Flip horizontal">&#8596;H</button>
   <button class="hbtn" id="btnFlipV"  disabled title="Flip vertical">V&#8597;</button>
-  <button class="hbtn" id="btnRot90"  disabled title="Rotate 90° clockwise">&#10227;</button>
+  <button class="hbtn" id="btnRot90"  disabled title="Rotate canvas 90° clockwise (all layers and frames)">&#10227;</button>
   <button class="hbtn" id="btnRot180" disabled title="Rotate 180°">&#10545;</button>
   <button class="hbtn" id="btnOutline" disabled title="Add 1px outline around non-transparent pixels on active layer">Outline</button>
   <button class="hbtn" id="btnResize" disabled title="Resize/scale canvas">Resize</button>
@@ -544,12 +544,6 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
       <select id="resInterp">
         <option value="nearest" selected>Nearest (pixel-art)</option>
         <option value="bilinear">Bilinear (smooth)</option>
-      </select>
-    </div>
-    <div class="row"><label>Apply to</label>
-      <select id="resScope">
-        <option value="all">All frames</option>
-        <option value="active">Active frame only</option>
       </select>
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;">
@@ -3879,17 +3873,17 @@ $('#btnFlipV').onclick =()=>{ commitSel(); transformLayer(flipV); };
 $('#btnRot180').onclick=()=>{ commitSel(); transformLayer(rot180); };
 $('#btnRot90').onclick =()=>{
   commitSel();
-  // rot90 changes canvas dimensions
+  // rot90 changes canvas dimensions, so it must rotate EVERY cell (all layers,
+  // all frames) — rotating only the active layer would leave the others at the
+  // old size and corrupt the document
   snapshot();
-  S.frames.forEach(f=>{
-    f.cells[S.activeLayer]=rot90cw(f.cells[S.activeLayer]);
-  });
+  S.frames.forEach(f=>{ f.cells=f.cells.map(rot90cw); });
   // swap w/h
   const tmp=S.w; S.w=S.h; S.h=tmp;
   syncImgData();
-  resizeCanvases(); renderMain(); buildPalette();
+  resizeCanvases(); updateGrid(); renderFrameStrip(); renderMain(); buildPalette();
   $('#fileMeta').textContent=S.fileName+' \u2014 '+S.w+'\xd7'+S.h;
-  showToast('Rotated 90\xb0');
+  showToast('Rotated canvas 90\xb0');
 };
 
 // Enable transform buttons when project loads
@@ -4074,7 +4068,6 @@ $('#resGo').onclick=()=>{
   const nh=clamp(+$('#resH').value||S.h,1,4096);
   if(nw===S.w&&nh===S.h){$('#resizeModal').style.display='none';return;}
   const interp=$('#resInterp').value;
-  const scope=$('#resScope').value;
   $('#resizeModal').style.display='none';
   snapshot();
 
@@ -4089,13 +4082,9 @@ $('#resGo').onclick=()=>{
     return ctx.getImageData(0,0,nw,nh);
   }
 
-  const frameIdxs=scope==='active'?[S.activeFrame]:S.frames.map((_,i)=>i);
-  frameIdxs.forEach(fi=>{
-    const f=S.frames[fi];
-    f.cells=f.cells.map(cell=>resizeCell(cell,S.w,S.h));
-  });
-  // if all frames resized, update canvas size
-  if(scope==='all'||S.frames.length===1){S.w=nw;S.h=nh;}
+  // every frame shares the canvas size, so resize all of them
+  S.frames.forEach(f=>{ f.cells=f.cells.map(cell=>resizeCell(cell,S.w,S.h)); });
+  S.w=nw;S.h=nh;
   syncImgData();
   const az=area.clientWidth,ah2=area.clientHeight;
   let z=Math.floor(Math.min(az/S.w,ah2/S.h));
