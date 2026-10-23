@@ -389,7 +389,8 @@ select option{background:var(--panel2)}
       <div class="help-step-num">3</div>
       <div class="help-step-title">Edit vertices</div>
       <div class="help-step-body">
-        • <b>Select</b> mode (V): click to select, Shift+click to multi-select, drag to box-select.<br>
+        • <b>Select</b> mode (V): click to select, Shift+click to multi-select, drag on empty space to box-select.
+        Dragging a vertex in Select mode edits the mesh itself (its rest position), without creating a keyframe.<br>
         • <b>Add Vertex</b> (A): click anywhere on the sprite to place a new vertex. Mesh re-triangulates automatically.<br>
         • <b>Del Vertex</b>: select one or more vertices, then click the button or press <b>Delete</b>/<b>Backspace</b>.<br>
         • Ctrl+A selects all. Esc clears the selection.
@@ -479,9 +480,6 @@ let hovIdx  = -1;
 let dragging = false, dragStart = null, boxSel = null;
 let spriteOpacity = 0.8;
 const opts  = { showSprite:true, showMesh:true, showVerts:true, exportMesh:false };
-
-// Export buffer
-let exportZipData = null;
 
 // ── Undo / Redo ───────────────────────────────────────────────
 const undoStack = [];
@@ -643,7 +641,14 @@ function onMM(e){
   if(dragging&&dragStart){
     if(dragStart.vtxDrag){
       const dx=(mx-dragStart.mx)/viewScale, dy=(my-dragStart.my)/viewScale;
-      for(const s of dragStart.snaps){ verts[s.i].x=clamp(s.ox+dx,0,spriteW); verts[s.i].y=clamp(s.oy+dy,0,spriteH); }
+      if(!dragStart.undoPushed&&(dx||dy)){ pushUndo(); dragStart.undoPushed=true; } // state before the drag
+      for(const s of dragStart.snaps){
+        verts[s.i].x=clamp(s.ox+dx,0,spriteW); verts[s.i].y=clamp(s.oy+dy,0,spriteH);
+        if(mode==='select'){
+          // Select mode edits the mesh itself: the rest position moves with the vertex
+          verts[s.i].ox=clamp(s.rx+dx,0,spriteW); verts[s.i].oy=clamp(s.ry+dy,0,spriteH);
+        }
+      }
       render(); return;
     }
     boxSel={x1:dragStart.mx,y1:dragStart.my,x2:mx,y2:my};
@@ -666,11 +671,13 @@ function onMD(e){
   }
   const hit=pickVertex(mx,my);
   if(hit>=0){
-    if(!e.shiftKey&&!selIdx.has(hit)) selIdx.clear();
-    selIdx.has(hit)?selIdx.delete(hit):selIdx.add(hit);
+    // Shift toggles; a plain click on an already-selected vertex keeps the selection,
+    // so a multi-selection can be dragged by any of its vertices
+    if(e.shiftKey){ selIdx.has(hit)?selIdx.delete(hit):selIdx.add(hit); }
+    else if(!selIdx.has(hit)){ selIdx.clear(); selIdx.add(hit); }
     dragging=true;
-    // Snapshot positions at drag start for undo + moved detection
-    dragStart={mx,my,vtxDrag:true,snaps:[...selIdx].map(i=>({i,ox:verts[i].x,oy:verts[i].y}))};
+    // Positions at drag start (current pose + rest pose) for moved detection
+    dragStart={mx,my,vtxDrag:true,snaps:[...selIdx].map(i=>({i,ox:verts[i].x,oy:verts[i].y,rx:verts[i].ox,ry:verts[i].oy}))};
     canvas.style.cursor='grabbing';
   } else {
     if(!e.shiftKey) selIdx.clear();
@@ -688,16 +695,23 @@ function onMU(){
       if(cv.x>=x1&&cv.x<=x2&&cv.y>=y1&&cv.y<=y2) selIdx.add(i);
     }
   }
-  // Auto-keyframe: if deforming and vertices actually moved, commit a keyframe
-  if(dragStart?.vtxDrag && mode==='deform'){
-    const moved = dragStart.snaps.some(s=>
-      Math.abs(verts[s.i].x-s.ox)>0.01 || Math.abs(verts[s.i].y-s.oy)>0.01
-    );
-    if(moved){
-      pushUndo();
-      _commitKeyframe();
-      hint(`Auto-keyframe at frame ${currentFrame}`);
+  const moved = dragStart?.vtxDrag && dragStart.snaps.some(s=>
+    Math.abs(verts[s.i].x-s.ox)>0.01 || Math.abs(verts[s.i].y-s.oy)>0.01
+  );
+  // Deform: auto-keyframe the new pose (undo checkpoint was pushed when the drag started)
+  if(moved && mode==='deform'){
+    _commitKeyframe();
+    hint(`Auto-keyframe at frame ${currentFrame}`);
+  }
+  // Select: the mesh changed — shift the moved vertices in every keyframe by the
+  // same rest-pose offset (keeps their deformation), then re-triangulate
+  if(moved && mode==='select'){
+    for(const s of dragStart.snaps){
+      const ddx=verts[s.i].ox-s.rx, ddy=verts[s.i].oy-s.ry;
+      for(const pos of keyframes.values()){ pos[s.i*2]+=ddx; pos[s.i*2+1]+=ddy; }
     }
+    triangulate();
+    hint('Mesh edited');
   }
   dragging=false; dragStart=null; boxSel=null;
   if(mode!=='add') canvas.style.cursor=mode==='deform'?'grab':'crosshair';
@@ -1106,48 +1120,6 @@ function render(){
   }
 }
 
-// ── Affine warp ───────────────────────────────────────────────
-// Root cause of colour mixing: drawing multiple clipped triangles onto a
-// shared canvas accumulates alpha through the default 'source-over'
-// compositing.  Pixels on triangle edges get blended with whatever was
-// already there → colour fringing.
-//
-// Fix: three-buffer approach, all in sprite-space.
-//   _triCanvas  – single-triangle scratch buffer.  Each triangle is drawn
-//                 here in isolation (full sprite with affine warp, no clip).
-//   _maskCanvas – same size, used to rasterise the triangle's silhouette as
-//                 a 1-bit mask.
-//   _warpCanvas – accumulates the final image using 'copy' compositing so
-//                 each triangle REPLACES what was underneath; no blending.
-//
-// The accumulation step:
-//   1. Render warped sprite into _triCanvas (full size, no clip).
-//   2. Draw filled triangle on _maskCanvas (white on black).
-//   3. On _warpCanvas: use _triCanvas as source, _maskCanvas as mask via
-//      'destination-in' — but the simplest Canvas 2D equivalent is:
-//      a) stamp the triangle polygon into _warpCanvas using 'source-over'
-//         with the sprite content clipped to that polygon.
-//      b) Use globalCompositeOperation='source-atop' to write pixels only
-//         where the destination (accumulator) has alpha.
-//
-// Simpler & robust: render each triangle into its own isolated offscreen
-// and composite it onto the accumulator with 'source-over', but FIRST erase
-// the accumulator region covered by this triangle using 'destination-out'
-// then 'source-over'.  This prevents double-blending at shared edges.
-//
-// Actually the cleanest approach for pixel art:
-//   Per-triangle: warp full sprite → tmp, then copy only the triangle region
-//   onto the accumulator using 'destination-out' + 'source-over' pattern,
-//   or simply: clear that region then stamp.  Since polygons tile perfectly
-//   (Delaunay), using 'source-over' with a pre-cleared accumulator and
-//   drawing each triangle exactly once with NO alpha on the accumulator
-//   background works — the issue is only when transparent pixels from one
-//   triangle land on opaque pixels from another.
-//
-// Correct solution: render each tri to _triCanvas, clip-copy to _warpCanvas
-// using composite='copy' per-triangle region so existing pixels are replaced,
-// not blended.
-
 // ── Pixel-perfect warp — ImageData rasterizer ────────────────
 // Canvas 2D compositing (even destination-out) anti-aliases polygon edges,
 // causing colour mixing at triangle boundaries in pixel art.
@@ -1255,18 +1227,6 @@ function renderWarpedSprite(){
   ctx.restore();
 }
 
-// affineMapSprite kept for export renderer (still used there)
-function affineMapSprite(x1,y1,x2,y2,x3,y3, u1,v1,u2,v2,u3,v3){
-  const denom = (x1*(y2-y3) + x2*(y3-y1) + x3*(y1-y2));
-  if(Math.abs(denom)<1e-8) return null;
-  const a = (u1*(y2-y3) + u2*(y3-y1) + u3*(y1-y2)) / denom;
-  const c = (u1*(x3-x2) + u2*(x1-x3) + u3*(x2-x1)) / denom;
-  const e = (u1*(x2*y3-x3*y2) + u2*(x3*y1-x1*y3) + u3*(x1*y2-x2*y1)) / denom;
-  const b = (v1*(y2-y3) + v2*(y3-y1) + v3*(y1-y2)) / denom;
-  const d = (v1*(x3-x2) + v2*(x1-x3) + v3*(x2-x1)) / denom;
-  const f = (v1*(x2*y3-x3*y2) + v2*(x3*y1-x1*y3) + v3*(x1*y2-x2*y1)) / denom;
-  return [a, b, c, d, e, f];
-}
 
 // ══════════════════════════════════════════════════════════════
 //  TIMELINE RENDER
@@ -1290,7 +1250,7 @@ function renderTimeline(){
   tc.font='9px monospace';
   for(let f=0;f<totalFrames;f++){
     const x=f*TL_CELL;
-    tc.fillStyle=f===currentFrame?'var(--accent, #e8900a)':'#454648';
+    tc.fillStyle=f===currentFrame?'#e8900a':'#454648';
     tc.fillRect(x,0,1,20);
     if(f%2===0){
       tc.fillStyle=f===currentFrame?'#e8900a':'#606268';
@@ -1356,10 +1316,7 @@ document.getElementById('tlCanvas').addEventListener('click', e=>{
   const f=clamp(Math.floor(x/TL_CELL),0,totalFrames-1);
   goToFrame(f);
 });
-document.getElementById('tlCanvas').addEventListener('mousemove', e=>{
-  const r=tlCanvas.getBoundingClientRect();
-  tlCanvas.style.cursor = 'pointer';
-});
+tlCanvas.style.cursor = 'pointer';
 
 // ══════════════════════════════════════════════════════════════
 //  EXPORT  (ZIP with CRC32 – hand-rolled)
@@ -1608,7 +1565,7 @@ function updateUI(){
   document.getElementById('sb-mode').textContent=mode.toUpperCase();
   document.getElementById('sb-frame').textContent=`Frame ${currentFrame} / ${totalFrames-1}`;
   document.getElementById('tl-frame-label').textContent=`Frame ${currentFrame}`;
-  const hints={select:'Click to select · Shift+click multi-select · Drag to box-select · Del to delete',add:'Click on sprite to add a vertex',deform:'Drag vertices to deform · drag on keyframe frame to animate'};
+  const hints={select:'Click to select · Shift+click multi-select · Drag a vertex to edit the mesh · Drag empty space to box-select · Del to delete',add:'Click on sprite to add a vertex',deform:'Drag vertices to deform · drag on keyframe frame to animate'};
   document.getElementById('sb-hint').textContent=hints[mode]||'';
 }
 function hint(t){ document.getElementById('sb-hint').textContent=t; }

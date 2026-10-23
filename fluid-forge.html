@@ -643,6 +643,7 @@ canvas.addEventListener('pointerdown', e=>{
   const [gx,gy] = clientToGrid(e);
   addDensityVel(gx,gy, params.brushSize*(res/64), params.brushDens*1.6, 0, 0);
   lastGx=gx; lastGy=gy; haveLast=true;
+  if(!playing) render(); // paused: show the painted density right away
 });
 canvas.addEventListener('pointermove', e=>{
   if(!isPointerDown) return;
@@ -652,13 +653,14 @@ canvas.addEventListener('pointermove', e=>{
   addDensityVel(gx,gy, params.brushSize*(res/64), params.brushDens*1.2,
     dx*params.brushVel*3, dy*params.brushVel*3);
   lastGx=gx; lastGy=gy; haveLast=true;
+  if(!playing) render();
 });
 window.addEventListener('pointerup', ()=>{ isPointerDown=false; haveLast=false; });
 
 function queueBurstAtCenter(){
   burstAt(GRIDN/2, GRIDN/2, Math.max(4,res*0.18), 1.4);
 }
-document.getElementById('btnBurst').addEventListener('click', queueBurstAtCenter);
+document.getElementById('btnBurst').addEventListener('click', ()=>{ queueBurstAtCenter(); if(!playing) render(); });
 
 /* ================= PLAYBACK LOOP ================= */
 let playing = true;

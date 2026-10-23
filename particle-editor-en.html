@@ -751,12 +751,12 @@ function valueNoise3(x,y,z){
   return lerp(y0,y1,w);
 }
 
-function showToast(msg){
+function showToast(msg, ms=2200){
   const t=document.getElementById('toast');
   t.textContent=msg;
   t.classList.add('show');
   clearTimeout(t._timer);
-  t._timer=setTimeout(()=>t.classList.remove('show'),2200);
+  t._timer=setTimeout(()=>t.classList.remove('show'),ms);
 }
 
 function showConfirm(message, onConfirm, opts){
@@ -2622,9 +2622,20 @@ function applyLoadedConfig(loaded){
 /* =========================================================
    AUTOSAVE
 ========================================================= */
+let autosaveWarned=false; // warn once per failure streak, not every 4 s
 setInterval(()=>{
   if(isDirty){
-    try{ localStorage.setItem('particleForgeAutosave', JSON.stringify(serializeConfig())); isDirty=false; }catch(e){}
+    try{
+      localStorage.setItem('particleForgeAutosave', JSON.stringify(serializeConfig()));
+      isDirty=false; autosaveWarned=false;
+    }catch(e){
+      // usually QuotaExceededError: custom textures/masks are stored as data URLs
+      // and can exceed the browser's ~5 MB localStorage limit
+      if(!autosaveWarned){
+        autosaveWarned=true;
+        showToast('Autosave failed — browser storage is full (large custom textures?). Use Save to keep your work in a file.', 7000);
+      }
+    }
   }
 },4000);
 window.addEventListener('load',()=>{
@@ -2818,7 +2829,7 @@ const PRESETS = {
   }
 };
 const PRESET_LABELS={fire:'Fire',smoke:'Smoke',magic:'Magic',explosion:'Explosion',rain:'Rain',snow:'Snow',
-  confetti:'Confetti',campfire:'Ognisko',fireworks:'Fajerwerki',portal:'Portal magiczny'};
+  confetti:'Confetti',campfire:'Campfire',fireworks:'Fireworks',portal:'Magic portal'};
 
 function applyPreset(name){
   const preset=PRESETS[name];

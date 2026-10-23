@@ -872,17 +872,27 @@ function activeCell(){ return S.frames[S.activeFrame].cells[S.activeLayer]; }
 // Keep S.imgData pointing to active cell (tools use S.imgData directly)
 function syncImgData(){ S.imgData=activeCell(); }
 
+// Reusable offscreen canvases, one per purpose — rendering runs on every
+// mouse move, and allocating fresh canvases each time is what made large
+// canvases slow. drawImage() copies synchronously, so reuse is safe.
+const _scratch=new Map();
+function scratch(key,w,h){
+  let c=_scratch.get(key);
+  if(!c){ c=document.createElement('canvas'); _scratch.set(key,c); }
+  if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } // resizing also clears
+  return c;
+}
+
 // Composite all visible layers of a frame into a temp canvas
 function compositeFrame(frameIdx, destCtx){
   const w=S.w,h=S.h;
   destCtx.clearRect(0,0,w,h);
+  const tmp=scratch('layer',w,h), tx=tmp.getContext('2d');
   for(let li=0;li<S.layers.length;li++){
     const layer=S.layers[li];
     if(!layer.visible)continue;
     const cell=S.frames[frameIdx].cells[li];
-    const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
-    const tx=tmp.getContext('2d');
-    tx.putImageData(cell,0,0);
+    tx.putImageData(cell,0,0); // replaces every pixel, no clear needed
     destCtx.globalAlpha=layer.opacity;
     destCtx.drawImage(tmp,0,0);
   }
@@ -902,11 +912,12 @@ function renderMain(){
     function drawOnion(frameIdx, tintR, tintG, tintB, opacity){
       if(opacity<=0)return;
       // composite the onion frame
-      const base=document.createElement('canvas');base.width=S.w;base.height=S.h;
+      const base=scratch('onionBase',S.w,S.h);
       compositeFrame(frameIdx,base.getContext('2d'));
       // tint: draw frame, then overlay tint color using multiply-like blend
-      const tinted=document.createElement('canvas');tinted.width=S.w;tinted.height=S.h;
+      const tinted=scratch('onionTint',S.w,S.h);
       const tx=tinted.getContext('2d');
+      tx.clearRect(0,0,S.w,S.h);
       tx.drawImage(base,0,0);
       tx.globalCompositeOperation='source-atop';
       tx.fillStyle=`rgba(${tintR},${tintG},${tintB},0.55)`;
@@ -923,7 +934,8 @@ function renderMain(){
   }
 
   // draw active frame composite (on temp canvas to preserve onion below)
-  const activeTmp=document.createElement('canvas');activeTmp.width=S.w;activeTmp.height=S.h;
+  // — composited once and reused below by the preview, tile ghost and thumbnail
+  const activeTmp=scratch('active',S.w,S.h);
   compositeFrame(S.activeFrame,activeTmp.getContext('2d'));
   ctxM.drawImage(activeTmp,0,0);
 
@@ -931,20 +943,24 @@ function renderMain(){
   // (putImageData replaces pixels directly, including alpha=0, which would
   // erase the layer content showing through transparent parts of selData)
   if(S.selData&&S.sel){
-    const selTmp=document.createElement('canvas');
-    selTmp.width=S.sel.w; selTmp.height=S.sel.h;
-    selTmp.getContext('2d').putImageData(S.selData,0,0);
-    ctxM.drawImage(selTmp,S.sel.x,S.sel.y);
+    ctxM.drawImage(selDataCanvas(),S.sel.x,S.sel.y);
   }
 
   drawEdgeBorder();
   renderOverlay();
-  renderPreview();
-  updateTileGhost();
+  renderPreview(activeTmp);
+  updateTileGhost(activeTmp);
   // update active frame thumbnail
-  updateFrameThumb(S.activeFrame);
+  updateFrameThumb(S.activeFrame,activeTmp);
   // update reference image position
   if(typeof refLoaded!=='undefined'&&refLoaded) positionRef();
+}
+
+// Floating selection pixels as a canvas (for alpha-blended drawing)
+function selDataCanvas(){
+  const c=scratch('sel',S.sel.w,S.sel.h);
+  c.getContext('2d').putImageData(S.selData,0,0);
+  return c;
 }
 
 // ── Undo: full-document snapshots ──────────────────────────────────────────
@@ -1307,7 +1323,8 @@ function renderFrameStrip(){
   renderTagsBar();
 }
 
-function updateFrameThumb(idx){
+// composite: optional, already-composited canvas of frame `idx`
+function updateFrameThumb(idx,composite){
   if(S.frameCompact)return; // no thumbnail canvas to update in compact mode
   const divs=$('#frameThumbsWrap')?.children;
   if(!divs||!divs[idx])return;
@@ -1315,8 +1332,8 @@ function updateFrameThumb(idx){
   if(!can)return;
   const ctx=can.getContext('2d');
   ctx.clearRect(0,0,THUMB_W,THUMB_H);
-  const tmp=document.createElement('canvas');tmp.width=S.w;tmp.height=S.h;
-  compositeFrame(idx,tmp.getContext('2d'));
+  let tmp=composite;
+  if(!tmp){ tmp=scratch('thumb',S.w,S.h); compositeFrame(idx,tmp.getContext('2d')); }
   ctx.imageSmoothingEnabled=false;
   ctx.drawImage(tmp,0,0,THUMB_W,THUMB_H);
 }
@@ -1482,7 +1499,8 @@ function repositionTileGhost(){
   cvTile.style.top=(S.oy-tileH)+'px';
 }
 
-function updateTileGhost(){
+// composite: optional, already-composited canvas of the active frame
+function updateTileGhost(composite){
   if(!S.tileMode||!S.imgData){
     cvTile.style.display='none';
     return;
@@ -1498,8 +1516,8 @@ function updateTileGhost(){
   ctxT.imageSmoothingEnabled=false;
   ctxT.clearRect(0,0,cvTile.width,cvTile.height);
   // composite the current frame once at native resolution, then stamp 9× scaled
-  const tmp=document.createElement('canvas'); tmp.width=w; tmp.height=h;
-  compositeFrame(S.activeFrame, tmp.getContext('2d'));
+  let tmp=composite;
+  if(!tmp){ tmp=scratch('tile',w,h); compositeFrame(S.activeFrame, tmp.getContext('2d')); }
   for(let ty=0;ty<3;ty++) for(let tx=0;tx<3;tx++){
     ctxT.drawImage(tmp,tx*tileW,ty*tileH,tileW,tileH);
   }
@@ -3261,28 +3279,24 @@ function showFindPanel(r,g,b,a,count){
 // ── Preview window ────────────────────────────────────────────────────────
 let previewOpen=false;
 
-function renderPreview(){
+// composite: optional, already-composited canvas of the active frame
+function renderPreview(composite){
   if(!previewOpen||!S.imgData)return;
   const sc=+$('#previewScale').value||2;
   const cvP=$('#cvPreview');
   const pw=S.w*sc, ph=S.h*sc;
-  cvP.width=pw; cvP.height=ph;
-  cvP.style.width=pw+'px'; cvP.style.height=ph+'px';
-  cvP.style.maxWidth='none'; cvP.style.maxHeight='none';
-  const tmp=document.createElement('canvas');
-  tmp.width=S.w; tmp.height=S.h;
-  const tx=tmp.getContext('2d');
-  compositeFrame(S.activeFrame,tx); // full layer composite, not just active layer
-  if(S.selData&&S.sel){
-    const selTmp=document.createElement('canvas');
-    selTmp.width=S.sel.w; selTmp.height=S.sel.h;
-    selTmp.getContext('2d').putImageData(S.selData,0,0);
-    tx.drawImage(selTmp,S.sel.x,S.sel.y);
+  if(cvP.width!==pw||cvP.height!==ph){
+    cvP.width=pw; cvP.height=ph;
+    cvP.style.width=pw+'px'; cvP.style.height=ph+'px';
+    cvP.style.maxWidth='none'; cvP.style.maxHeight='none';
   }
+  let tmp=composite;
+  if(!tmp){ tmp=scratch('preview',S.w,S.h); compositeFrame(S.activeFrame,tmp.getContext('2d')); } // all layers
   const ctx2=cvP.getContext('2d');
   ctx2.imageSmoothingEnabled=false;
   ctx2.clearRect(0,0,pw,ph);
   ctx2.drawImage(tmp,0,0,pw,ph);
+  if(S.selData&&S.sel) ctx2.drawImage(selDataCanvas(),S.sel.x*sc,S.sel.y*sc,S.sel.w*sc,S.sel.h*sc);
   const lbl=$('#previewWin .preview-title');
   if(lbl) lbl.textContent='📷 Preview '+sc+'×';
 }
@@ -3972,20 +3986,52 @@ function drawStampPreview(ix,iy){
 }
 
 
-// ── Recent files (localStorage) ────────────────────────────────────────────
+// ── Recent files ─────────────────────────────────────────────────────────────
+// The list lives in localStorage; a copy of each opened file is kept in
+// IndexedDB (browsers can't re-open a file from disk by name), so clicking an
+// entry re-opens that copy — the file as it was when it was opened.
 const RECENT_KEY='pixelforge_recent';
 const MAX_RECENT=10;
+const recentKey=(name,type)=>type+':'+name;
+
+function recentDb(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open('pixelforge',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('recentFiles');
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+async function recentStore(fn,mode='readwrite'){
+  const db=await recentDb();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('recentFiles',mode), req=fn(tx.objectStore('recentFiles'));
+    tx.oncomplete=()=>{db.close();res(req&&req.result);}; tx.onerror=()=>{db.close();rej(tx.error);};
+  });
+}
 
 function getRecent(){
   try{return JSON.parse(localStorage.getItem(RECENT_KEY)||'[]');}catch{return[];}
 }
-function saveRecent(name,type){
+function saveRecent(file,type){
   // type = 'png' | 'pfp'
+  const name=file.name;
   let list=getRecent();
   list=list.filter(r=>r.name!==name||r.type!==type);
   list.unshift({name,type,date:Date.now()});
-  if(list.length>MAX_RECENT)list.length=MAX_RECENT;
+  const dropped=list.splice(MAX_RECENT);
   try{localStorage.setItem(RECENT_KEY,JSON.stringify(list));}catch{}
+  recentStore(st=>{
+    st.put(file,recentKey(name,type));
+    dropped.forEach(r=>st.delete(recentKey(r.name,r.type)));
+  }).catch(()=>{}); // no IndexedDB (e.g. private mode): the list still shows names
+}
+async function openRecent(r){
+  let blob=null;
+  try{ blob=await recentStore(st=>st.get(recentKey(r.name,r.type)),'readonly'); }catch{}
+  if(!blob){ showToast('No stored copy of '+r.name+' — use Open to load it from disk.'); return; }
+  const file=new File([blob],r.name,{type:blob.type});
+  const ev={target:{files:[file],value:''}};
+  if(r.type==='pfp') $('#projIn').onchange(ev); else $('#fileIn').onchange(ev);
 }
 function renderRecentList(){
   const list=getRecent();
@@ -4000,11 +4046,8 @@ function renderRecentList(){
     const dt=document.createElement('div');dt.className='ri-date';
     dt.textContent=new Date(r.date).toLocaleDateString();
     row.append(ico,nm,dt);
-    row.title='Re-open '+r.name+' ('+r.type.toUpperCase()+')';
-    row.onclick=()=>{
-      closeRecent();
-      showToast('Re-open: drag the file onto the app or use Open button — browser security prevents auto-open.\n('+r.name+')');
-    };
+    row.title='Re-open '+r.name+' ('+r.type.toUpperCase()+') — the copy saved when it was opened';
+    row.onclick=()=>{ closeRecent(); openRecent(r); };
     el.appendChild(row);
   });
 }
@@ -4027,6 +4070,7 @@ $('#btnRecent').onclick=e=>{
 };
 $('#recentClear').onclick=()=>{
   try{localStorage.removeItem(RECENT_KEY);}catch{}
+  recentStore(st=>{st.clear();}).catch(()=>{});
   renderRecentList();
 };
 
@@ -4034,13 +4078,13 @@ $('#recentClear').onclick=()=>{
 const _origFileChange=$('#fileIn').onchange;
 $('#fileIn').onchange=e=>{
   const file=e.target.files[0];
-  if(file)saveRecent(file.name,'png');
+  if(file)saveRecent(file,'png');
   _origFileChange&&_origFileChange.call($('#fileIn'),e);
 };
 const _origProjChange=$('#projIn').onchange;
 $('#projIn').onchange=e=>{
   const file=e.target.files[0];
-  if(file)saveRecent(file.name,'pfp');
+  if(file)saveRecent(file,'pfp');
   _origProjChange&&_origProjChange.call($('#projIn'),e);
 };
 

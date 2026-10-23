@@ -390,7 +390,6 @@ async function parseZip(arrayBuffer) {
   const cdCount  = readUint16LE(data, eocdOff + 8);
   const cdSize   = readUint32LE(data, eocdOff + 12);
   const cdOffset = readUint32LE(data, eocdOff + 16);
-  console.log('[ZIP] EOCD found. CD entries:', cdCount, 'CD offset:', cdOffset);
 
   // ── Step 2: walk Central Directory to get correct sizes + local offsets ──
   const entries = [];
@@ -408,7 +407,6 @@ async function parseZip(arrayBuffer) {
     entries.push({ fname, compression, compSize, uncompSize, localOff });
     p += 46 + fnLen + extraLen + commentLen;
   }
-  console.log('[ZIP] Parsed', entries.length, 'CD entries');
 
   // ── Step 3: for each entry, find actual data via local header ──
   for (const entry of entries) {
@@ -430,8 +428,6 @@ async function parseZip(arrayBuffer) {
     const dataStart = lh + 30 + lfnLen + lextraLen;
     const compData  = data.subarray(dataStart, dataStart + compSize);
 
-    console.log('[ZIP]', fname, 'compression=' + compression, 'compSize=' + compSize, 'dataStart=' + dataStart);
-
     if (compression === 0) {
       files[fname] = compData.slice();
     } else if (compression === 8) {
@@ -446,7 +442,6 @@ async function parseZip(arrayBuffer) {
         let off = 0;
         for (const c of out) { merged.set(c, off); off += c.byteLength; }
         files[fname] = merged;
-        console.log('[ZIP]   OK', merged.length, 'bytes');
       } catch(e) {
         console.error('[ZIP]   deflate FAILED for', fname, ':', e.message);
       }
@@ -455,7 +450,6 @@ async function parseZip(arrayBuffer) {
     }
   }
 
-  console.log('[ZIP] Done. Loaded', Object.keys(files).length, 'files');
   return files;
 }
 
@@ -475,12 +469,12 @@ function sortedPNGs(names) {
   return names
     .filter(n => {
       if (!/\.png$/i.test(n)) return false;
-      // Odrzuć macOS metadata i ukryte pliki (zaczynające się od . po / lub na początku)
+      // Skip macOS metadata and hidden files (path segments starting with "." or __MACOSX)
       const parts = n.replace(/\\/g, '/').split('/');
       return !parts.some(p => p.startsWith('__MACOSX') || p.startsWith('.'));
     })
     .sort((a,b) => {
-      // Sortuj po ostatnim numerze w nazwie pliku (nie w ścieżce)
+      // Sort by the last number in the file name (not in the folder path)
       const baseName = s => s.replace(/\\/g,'/').split('/').pop();
       const num = s => { const m=baseName(s).match(/(\d+)/g); return m ? parseInt(m[m.length-1]) : 0; };
       const na = num(a), nb = num(b);
@@ -608,9 +602,11 @@ function renderFrame(f) {
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(offCtx, 0, 0, state.canvasW, state.canvasH,
                         0, 0, previewCanvas.width, previewCanvas.height);
-  frameCounter.textContent = `${f} / ${state.totalFrames - 1}`;
+  frameCounter.textContent = `${f} / ${Math.max(0, state.totalFrames - 1)}`;
   timeCounter.textContent = (f / state.fps).toFixed(2) + 's';
-  previewInfo.textContent = `${state.canvasW} × ${state.canvasH}  •  frame ${f}`;
+  previewInfo.textContent = state.tracks.some(t => t.length)
+    ? `${state.canvasW} × ${state.canvasH}  •  frame ${f}`
+    : 'No animation loaded';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -663,8 +659,7 @@ function togglePlay() {
 // ═══════════════════════════════════════════════════════════════
 //  TIMELINE RENDER
 // ═══════════════════════════════════════════════════════════════
-const TRACK_H = 52;
-const RULER_H = 28;
+const RULER_H = 26; // must match --ruler-h in CSS
 
 function renderTimeline() {
   const z = state.zoom;
@@ -722,9 +717,7 @@ function bestStep(zoom) {
 
 function updatePlayhead() {
   const x = state.currentFrame * state.zoom;
-  playhead.style.left = (x + 110) + 'px'; // offset for track labels... actually playhead is inside timeline-inner so no offset needed
-  // Actually playhead is inside timeline-inner, position relative to that
-  playhead.style.left = x + 'px';
+  playhead.style.left = x + 'px'; // relative to #tl-inner
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -911,11 +904,11 @@ document.getElementById('clear-btn').addEventListener('click', () => {
   state.selectedSeg = null;
   state.totalFrames = 0;
   state.currentFrame = 0;
+  state.selectedFrames = new Set();
   state.canvasW = 320; state.canvasH = 180;
-  previewCanvas.width = 320; previewCanvas.height = 180;
-  ctx.clearRect(0,0,320,180);
   propBody.innerHTML = '<div id="prop-empty">Click a segment<br>to edit its properties</div>';
   renderTimeline();
+  applyPreviewZoom(1); // resizes the preview canvas and re-renders frame 0 / counters
   setStatus('Cleared');
 });
 
@@ -1108,7 +1101,6 @@ function escapeHtml(str) {
 
 function setStatus(msg) {
   statusEl.textContent = msg;
-  console.log('[AnimForge]', msg);
 }
 
 // ═══════════════════════════════════════════════════════════════

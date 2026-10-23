@@ -723,6 +723,24 @@ function resizeVP(){
 const w2s=(wx,wy)=>({sx:wx*S.vp.zoom+S.vp.x, sy:wy*S.vp.zoom+S.vp.y});
 const s2w=(sx,sy)=>({wx:(sx-S.vp.x)/S.vp.zoom, wy:(sy-S.vp.y)/S.vp.zoom});
 
+// Onion-skin silhouettes: trimmed sprite filled with a flat colour, cached per
+// image + colour (sprite images never change once loaded)
+const _tintCache=new WeakMap(); // img -> Map(key -> canvas)
+function tintedSprite(sp,col){
+  let byKey=_tintCache.get(sp.img);
+  if(!byKey){byKey=new Map();_tintCache.set(sp.img,byKey);}
+  const key=`${col}|${sp.trimX},${sp.trimY},${sp.trimW},${sp.trimH}`;
+  let c=byKey.get(key);
+  if(!c){
+    c=document.createElement('canvas');c.width=sp.trimW;c.height=sp.trimH;
+    const x=c.getContext('2d');
+    x.drawImage(sp.img,sp.trimX,sp.trimY,sp.trimW,sp.trimH,0,0,sp.trimW,sp.trimH);
+    x.globalCompositeOperation='source-atop';x.fillStyle=col;x.fillRect(0,0,sp.trimW,sp.trimH);
+    byKey.set(key,c);
+  }
+  return c;
+}
+
 function renderVP(){
   const W=vpC.width,H=vpC.height;
   vpX.clearRect(0,0,W,H);
@@ -759,14 +777,8 @@ function renderVP(){
         vpX.imageSmoothingEnabled=false;
         vpX.translate(s0.sx,s0.sy);vpX.rotate(deg2rad(wa));
         vpX.imageSmoothingEnabled=false;
-        // tinted silhouette
-        vpX.drawImage(sp.img,sp.trimX,sp.trimY,sp.trimW,sp.trimH,
-          -pvX*zoom,-pvY*zoom,sp.trimW*zoom,sp.trimH*zoom);
-        // colour overlay
-        vpX.fillStyle=col;
-        vpX.globalCompositeOperation='source-atop';
-        vpX.fillRect(-pvX*zoom,-pvY*zoom,sp.trimW*zoom,sp.trimH*zoom);
-        vpX.globalCompositeOperation='source-over';
+        // tinted silhouette (tinted in its own buffer, so only the sprite gets coloured)
+        vpX.drawImage(tintedSprite(sp,col),-pvX*zoom,-pvY*zoom,sp.trimW*zoom,sp.trimH*zoom);
         vpX.restore();
         vpX.imageSmoothingEnabled=false;
       });
