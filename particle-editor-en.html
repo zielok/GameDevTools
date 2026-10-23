@@ -633,6 +633,9 @@ select.sel:hover{border-color:var(--plasma-dim);}
 
     <div class="section-title">Export duration</div>
     <div class="row" id="exp_timeHost"></div>
+    <div class="hint">Pre-warm runs the simulation this long before the first frame, so the effect is already in full swing instead of starting from nothing.</div>
+    <label class="checkrow"><input type="checkbox" id="exp_loop"> Seamless loop — the last frame flows into the first</label>
+    <div class="hint" id="exp_loopHint"></div>
 
     <div class="section-title">Alpha channel (transparency)</div>
     <div class="toggle-group" id="exp_alphaMode">
@@ -1057,8 +1060,17 @@ function spawnFrom(particlesArr, rngFn, ec, timeNow, overridePos){
     src:ec,
     startColorOverride,
     customFrameIndex,
-    trailAcc:0
+    trailAcc:0,
+    rootBirth:timeNow // birth time of the root particle of its sub-emitter family
   });
+}
+
+// Sub-emitter spawn: the child inherits its root's birth time, so a seamless-loop
+// export can keep or drop whole families (parent + trails + death bursts) together.
+function spawnChild(particlesArr, rngFn, target, timeNow, parent){
+  const n=particlesArr.length;
+  spawnFrom(particlesArr, rngFn, target, timeNow, {x:parent.x,y:parent.y,rot:0});
+  if(particlesArr.length>n) particlesArr[particlesArr.length-1].rootBirth=parent.rootBirth;
 }
 
 function getAccEntry(store, ec){
@@ -1113,7 +1125,7 @@ function advanceParticles(particlesArr, rngFn, timeNow, dt, forces){
         const target=resolveEmitterById(se.targetEmitterId);
         if(target){
           const count=Math.max(0,Math.round(se.burstCount||1));
-          for(let k=0;k<count;k++) spawnFrom(particlesArr, rngFn, target, timeNow, {x:pt.x,y:pt.y,rot:0});
+          for(let k=0;k<count;k++) spawnChild(particlesArr, rngFn, target, timeNow, pt);
         }
       }
       particlesArr.splice(i,1);
@@ -1127,7 +1139,7 @@ function advanceParticles(particlesArr, rngFn, timeNow, dt, forces){
         pt.trailAcc=(pt.trailAcc||0)+dt;
         const interval=Math.max(0.01, se.trailInterval||0.05);
         let guard=0;
-        while(pt.trailAcc>=interval && guard<20){ spawnFrom(particlesArr, rngFn, target, timeNow, {x:pt.x,y:pt.y,rot:0}); pt.trailAcc-=interval; guard++; }
+        while(pt.trailAcc>=interval && guard<20){ spawnChild(particlesArr, rngFn, target, timeNow, pt); pt.trailAcc-=interval; guard++; }
       }
     }
 
@@ -2862,7 +2874,7 @@ document.getElementById('presetSelect').addEventListener('change',(e)=>{
    with their real positions preserved.
 ========================================================= */
 const exportModal=document.getElementById('exportModal');
-let expCfg={ format:'sheet', cols:4, rows:4, frameW:96, frameH:58, duration:2.0, frameStep:1/20, alphaMode:'8bit', threshold:128, meta:true, autoGrid:true, lockAspect:true, _userSetRes:false };
+let expCfg={ format:'sheet', cols:4, rows:4, frameW:96, frameH:58, duration:2.0, frameStep:1/20, prewarm:0, loop:false, alphaMode:'8bit', threshold:128, meta:true, autoGrid:true, lockAspect:true, _userSetRes:false };
 
 function computeDefaultFrameSize(){
   const stageW=canvas.width, stageH=canvas.height;
@@ -2913,6 +2925,9 @@ function buildExportModalFields(){
   const timeHost=document.getElementById('exp_timeHost'); timeHost.innerHTML='';
   timeHost.appendChild(numField({label:'Duration', value:expCfg.duration, min:0.1,max:30,step:0.1,unit:'s', onChange:v=>{expCfg.duration=v;}}).el);
   timeHost.appendChild(numField({label:'Time step', value:expCfg.frameStep, min:1/60,max:2,step:1/60,decimals:4,unit:'s', onChange:v=>{expCfg.frameStep=v;}}).el);
+  timeHost.appendChild(numField({label:'Pre-warm', value:expCfg.prewarm, min:0,max:30,step:0.1,unit:'s', onChange:v=>{expCfg.prewarm=v;}}).el);
+  document.getElementById('exp_loop').checked=expCfg.loop;
+  updateLoopHint();
 
   const threshHost=document.getElementById('exp_thresholdHost'); threshHost.innerHTML='';
   threshHost.appendChild(numField({label:'Alpha threshold (0-255)', value:expCfg.threshold, min:1,max:254,step:1, onChange:v=>{expCfg.threshold=v;}}).el);
@@ -2942,14 +2957,50 @@ document.querySelectorAll('#exp_alphaMode .toggle-opt').forEach(opt=>{
   });
 });
 document.getElementById('exp_meta').addEventListener('change',(e)=>{ expCfg.meta=e.target.checked; });
+document.getElementById('exp_loop').addEventListener('change',(e)=>{ expCfg.loop=e.target.checked; });
+
+/* Effect cycle: the shortest time after which every emitter repeats exactly —
+   looping timelines repeat every `duration` (and restart their bursts then),
+   non-looping burst emitters every `burstInterval`. A seamless loop whose
+   length is a multiple of it keeps the burst rhythm / emitter motion intact
+   across the seam. Returns null if there's no common cycle within 30 s. */
+function computeEffectCycle(){
+  const periods=[];
+  cfg.emitters.forEach(ec=>{
+    if(ec.enabled===false) return;
+    if(isSubEmitterTarget(ec) && !ec.emitter.forceIndependentEmission) return;
+    if(ec.timeline.loop && ec.timeline.duration>0) periods.push(ec.timeline.duration);
+    else if(ec.emitter.mode!=='continuous') periods.push(Math.max(0.02,ec.emitter.burstInterval));
+  });
+  if(!periods.length) return 0; // fully continuous & static: any loop length works
+  const base=Math.max(...periods);
+  for(let m=1; base*m<=30+1e-9; m++){
+    const c=base*m;
+    if(periods.every(p=>{ const r=c/p; return Math.abs(r-Math.round(r))<1e-3; })) return c;
+  }
+  return null;
+}
+function updateLoopHint(){
+  const el=document.getElementById('exp_loopHint');
+  const cycle=computeEffectCycle();
+  el.textContent='Only particles born during the loop are rendered; those still alive at the end are wrapped around to the start, so the loop is seamless and at full density from frame 1. ';
+  if(cycle===0){ el.textContent+='Any duration works for this effect.'; return; }
+  if(cycle===null){ el.textContent+='The emitters have no common cycle under 30 s, so bursts/emitter motion may change rhythm at the seam.'; return; }
+  el.textContent+='Effect cycle: '+(Math.round(cycle*1000)/1000)+' s — use a duration that is a multiple of it. ';
+  const b=document.createElement('button'); b.className='hdr-btn'; b.textContent='Use '+(Math.round(cycle*1000)/1000)+' s';
+  b.style.cssText='padding:1px 8px;font-size:11px;';
+  b.onclick=()=>{ expCfg.duration=cycle; expCfg.loop=true; buildExportModalFields(); };
+  el.appendChild(b);
+}
 
 /* ---------- shared deterministic bake simulator ---------- */
 function createBaker(){
   const bakeRng=mulberry32(777);
   const state={ t:0, particles:[] };
   const accStore=new Map();
-  function stepBake(dt){
-    advanceEmitters(state.particles, bakeRng, state.t, dt, accStore);
+  // emit=false: only existing particles (and their sub-emitter children) evolve
+  function stepBake(dt, emit=true){
+    if(emit) advanceEmitters(state.particles, bakeRng, state.t, dt, accStore);
     advanceParticles(state.particles, bakeRng, state.t, dt, cfg.forces);
     state.t+=dt;
   }
@@ -3040,9 +3091,79 @@ function canvasToBlobAsync(cnv){
   return new Promise(resolve=>cnv.toBlob(resolve,'image/png'));
 }
 
-function bakeSpritesheet(){
+const MAX_FRAME_COUNT=600;
+// A seamless loop has no closing duplicate frame (frame N would equal frame 0).
+function exportFrameCount(){
+  const n=Math.round(expCfg.duration/expCfg.frameStep);
+  return Math.max(1, expCfg.loop ? n : n+1);
+}
+
+/* Renders every export frame into its own fw×fh canvas.
+   Normal mode: simulate `prewarm` seconds, then capture frameCount frames.
+   Seamless loop (window [T, T+L), T = prewarm, L = frameCount·step): only
+   particle families whose root is born inside the window are drawn, and the
+   simulation keeps running after the window until all of them have died —
+   a capture at T + τ + k·L is drawn into frame τ for every k. A particle that
+   is still alive when the loop ends therefore continues at the start of the
+   loop, which makes frame N−1 → frame 0 continuous by construction and the
+   effect fully "warmed up" on frame 0. */
+function renderExportCells(){
   const STAGE_W=canvas.width, STAGE_H=canvas.height;
-  const frameCount=Math.max(1, Math.round(expCfg.duration/expCfg.frameStep)+1);
+  const fw=expCfg.frameW, fh=expCfg.frameH, step=expCfg.frameStep;
+  const frameCount=exportFrameCount();
+  const T=Math.max(0, expCfg.prewarm||0);
+  const cells=[];
+  for(let i=0;i<frameCount;i++){ const c=document.createElement('canvas'); c.width=fw; c.height=fh; cells.push(c); }
+
+  const baker=createBaker();
+  const fixedDt=1/120;
+  const stageCanvas=document.createElement('canvas'); stageCanvas.width=STAGE_W; stageCanvas.height=STAGE_H;
+  const stageCtx=stageCanvas.getContext('2d');
+  // composite the stage into a cell (source-over, so wrapped loop passes accumulate)
+  const capture=(cell, keep)=>{
+    stageCtx.clearRect(0,0,STAGE_W,STAGE_H);
+    for(const pt of baker.state.particles) if(!keep||keep(pt)) drawParticle(stageCtx, pt, pt.src.visuals);
+    cell.getContext('2d').drawImage(stageCanvas,0,0,STAGE_W,STAGE_H,0,0,fw,fh);
+  };
+
+  if(!expCfg.loop){
+    let next=T;
+    for(let i=0;i<frameCount;i++){
+      while(baker.state.t < next - 1e-9){ baker.stepBake(fixedDt); }
+      capture(cells[i]);
+      next+=step;
+    }
+  } else {
+    const end=T+frameCount*step;
+    const inLoop=pt=>pt.rootBirth>=T-1e-9 && pt.rootBirth<end-1e-9;
+    baker.state.t=T; // nothing born before the window is drawn, so start empty at T
+    const HARD_STOP=end+120; // safety net for runaway sub-emitter chains
+    for(let j=0;;j++){
+      const next=T+j*step;
+      while(baker.state.t < next - 1e-9){ baker.stepBake(fixedDt, baker.state.t < end - 1e-9); }
+      if(next>=end-1e-9 && !baker.state.particles.some(inLoop)) break;
+      if(next>HARD_STOP) break;
+      capture(cells[j%frameCount], inLoop);
+    }
+  }
+
+  if(expCfg.alphaMode==='1bit'){
+    for(const cell of cells){
+      const cctx=cell.getContext('2d'), imgData=cctx.getImageData(0,0,fw,fh), d=imgData.data;
+      for(let k=3;k<d.length;k+=4){ d[k]=d[k]>=expCfg.threshold?255:0; }
+      cctx.putImageData(imgData,0,0);
+    }
+  }
+  return cells;
+}
+
+function exportMetaBase(){
+  return { frameStep:expCfg.frameStep, alphaMode:expCfg.alphaMode, loop:expCfg.loop, prewarm:expCfg.prewarm,
+           stageSize:{w:canvas.width,h:canvas.height} };
+}
+
+function bakeSpritesheet(){
+  const frameCount=exportFrameCount();
   let cols=expCfg.cols, rows=expCfg.rows;
   if(expCfg.autoGrid){
     cols=Math.ceil(Math.sqrt(frameCount));
@@ -3053,7 +3174,6 @@ function bakeSpritesheet(){
   const fw=expCfg.frameW, fh=expCfg.frameH;
   const sheetW=cols*fw, sheetH=rows*fh;
   const MAX_SHEET_PIXELS = 30000000;
-  const MAX_FRAME_COUNT = 600;
   if(frameCount>MAX_FRAME_COUNT){
     showToast('Too many frames ('+frameCount+'). Reduce the duration or increase the time step (limit: '+MAX_FRAME_COUNT+').');
     return;
@@ -3070,32 +3190,13 @@ function bakeSpritesheet(){
     return;
   }
 
-  const baker=createBaker();
-  const fixedDt=1/120;
-  let frameIdx=0, nextCapture=0;
+  const cells=renderExportCells();
   const frameRects=[];
-  const stageCanvas=document.createElement('canvas'); stageCanvas.width=STAGE_W; stageCanvas.height=STAGE_H;
-  const stageCtx=stageCanvas.getContext('2d');
-  while(frameIdx<frameCount){
-    while(baker.state.t < nextCapture - 1e-9){ baker.stepBake(fixedDt); }
-    stageCtx.clearRect(0,0,STAGE_W,STAGE_H);
-    for(const pt of baker.state.particles) drawParticle(stageCtx, pt, pt.src.visuals);
-
-    const cellCanvas=document.createElement('canvas'); cellCanvas.width=fw; cellCanvas.height=fh;
-    const cellCtx=cellCanvas.getContext('2d');
-    cellCtx.drawImage(stageCanvas,0,0,STAGE_W,STAGE_H,0,0,fw,fh);
-    if(expCfg.alphaMode==='1bit'){
-      const imgData=cellCtx.getImageData(0,0,fw,fh);
-      const d=imgData.data;
-      for(let k=3;k<d.length;k+=4){ d[k]=d[k]>=expCfg.threshold?255:0; }
-      cellCtx.putImageData(imgData,0,0);
-    }
+  cells.forEach((cell,frameIdx)=>{
     const col=frameIdx%cols, row=Math.floor(frameIdx/cols);
-    sctx.drawImage(cellCanvas,0,0,fw,fh, col*fw,row*fh,fw,fh);
+    sctx.drawImage(cell,0,0,fw,fh, col*fw,row*fh,fw,fh);
     frameRects.push({x:col*fw,y:row*fh,w:fw,h:fh});
-    frameIdx++;
-    nextCapture+=expCfg.frameStep;
-  }
+  });
 
   sheet.toBlob((blob)=>{
     if(!blob){
@@ -3116,29 +3217,24 @@ function bakeSpritesheet(){
         });
         const meta={
           frames,
-          meta:{
+          meta:Object.assign({
             image:'particle-spritesheet.png',
             size:{w:sheet.width,h:sheet.height},
             scale:'1',
-            frameStep:expCfg.frameStep,
             frameCount:frameRects.length,
-            alphaMode:expCfg.alphaMode,
-            stageSize:{w:STAGE_W,h:STAGE_H}
-          }
+          }, exportMetaBase())
         };
         const metaBlob=new Blob([JSON.stringify(meta,null,2)],{type:'application/json'});
         triggerDownload(metaBlob, 'particle-spritesheet.json');
       }, 400);
     }
-    showToast('Spritesheet exported ('+frameRects.length+' frames, '+cols+'x'+rows+') — check your Downloads folder');
+    showToast('Spritesheet exported ('+frameRects.length+' frames, '+cols+'x'+rows+(expCfg.loop?', seamless loop':'')+') — check your Downloads folder');
   },'image/png');
 }
 
 async function bakeFramesZip(){
-  const STAGE_W=canvas.width, STAGE_H=canvas.height;
-  const frameCount=Math.max(1, Math.round(expCfg.duration/expCfg.frameStep)+1);
+  const frameCount=exportFrameCount();
   const fw=expCfg.frameW, fh=expCfg.frameH;
-  const MAX_FRAME_COUNT=600;
   if(frameCount>MAX_FRAME_COUNT){
     showToast('Too many frames ('+frameCount+'). Reduce the duration or increase the time step (limit: '+MAX_FRAME_COUNT+').');
     return;
@@ -3148,53 +3244,30 @@ async function bakeFramesZip(){
     return;
   }
 
-  const baker=createBaker();
-  const fixedDt=1/120;
-  const stageCanvas=document.createElement('canvas'); stageCanvas.width=STAGE_W; stageCanvas.height=STAGE_H;
-  const stageCtx=stageCanvas.getContext('2d');
+  const cells=renderExportCells();
   const files=[];
-  let frameIdx=0, nextCapture=0;
-
-  while(frameIdx<frameCount){
-    while(baker.state.t < nextCapture - 1e-9){ baker.stepBake(fixedDt); }
-    stageCtx.clearRect(0,0,STAGE_W,STAGE_H);
-    for(const pt of baker.state.particles) drawParticle(stageCtx, pt, pt.src.visuals);
-
-    const cellCanvas=document.createElement('canvas'); cellCanvas.width=fw; cellCanvas.height=fh;
-    const cellCtx=cellCanvas.getContext('2d');
-    cellCtx.drawImage(stageCanvas,0,0,STAGE_W,STAGE_H,0,0,fw,fh);
-    if(expCfg.alphaMode==='1bit'){
-      const imgData=cellCtx.getImageData(0,0,fw,fh);
-      const d=imgData.data;
-      for(let k=3;k<d.length;k+=4){ d[k]=d[k]>=expCfg.threshold?255:0; }
-      cellCtx.putImageData(imgData,0,0);
-    }
-    const blob=await canvasToBlobAsync(cellCanvas);
+  for(let frameIdx=0; frameIdx<cells.length; frameIdx++){
+    const blob=await canvasToBlobAsync(cells[frameIdx]);
     if(!blob){
       showToast('Rendering frame '+frameIdx+' failed. Reduce the resolution and try again.');
       return;
     }
     const buf=new Uint8Array(await blob.arrayBuffer());
     files.push({ name:'frame_'+String(frameIdx).padStart(4,'0')+'.png', data:buf });
-    frameIdx++;
-    nextCapture+=expCfg.frameStep;
   }
 
   if(expCfg.meta){
-    const meta={
+    const meta=Object.assign({
       frameCount:files.length,
-      frameStep:expCfg.frameStep,
       frameSize:{w:fw,h:fh},
-      alphaMode:expCfg.alphaMode,
-      stageSize:{w:STAGE_W,h:STAGE_H},
       files: files.map(f=>f.name)
-    };
+    }, exportMetaBase());
     files.push({ name:'metadata.json', data:new TextEncoder().encode(JSON.stringify(meta,null,2)) });
   }
 
   const zipBlob=makeZip(files);
   triggerDownload(zipBlob, 'particle-frames.zip');
-  showToast('Exported '+frameCount+' separate frames as ZIP — check your Downloads folder');
+  showToast('Exported '+frameCount+' separate frames as ZIP'+(expCfg.loop?' (seamless loop)':'')+' — check your Downloads folder');
 }
 
 document.getElementById('exp_go').addEventListener('click',()=>{

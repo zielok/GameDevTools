@@ -59,6 +59,8 @@ A comprehensive particle editor for game VFX:
 - 11 built-in particle shapes plus animated spritesheet textures
 - Color randomization and independent X/Y scale curves over particle lifetime
 - Resizable stage, spritesheet/ZIP export, aspect-ratio locking, 1-bit alpha for retro effects
+- **Seamless loop export:** the last frame flows into the first and the effect is at full density from frame 1 (particles still alive at the end of the loop are wrapped around to its start); the editor suggests a loop length matching the effect's burst/timeline cycle
+- **Pre-warm:** start the export after N seconds of simulation instead of from an empty scene
 - Effect presets (fire, smoke, explosion, rain, snow, fireworks, portal and more), project save/load as JSON, autosave in the browser
 
 ---
