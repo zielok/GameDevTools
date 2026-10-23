@@ -1,0 +1,43 @@
+import {openPage,check,done} from './cdp.mjs';
+const SP=process.argv[2];
+const p=await openPage('file://'+SP+'/pages/mesh.html', SP+'/profile-meshe');
+const {ev,drag,send,errors}=p;
+await ev(`new Promise(res=>{const c=document.createElement('canvas');c.width=16;c.height=16;const x=c.getContext('2d');x.fillStyle='#c33';x.fillRect(0,0,16,16);
+  c.toBlob(b=>{loadImage(new File([b],'t.png',{type:'image/png'}));setTimeout(()=>res(true),400);});})`);
+await ev(`document.getElementById('grid-cols').value=4;document.getElementById('grid-rows').value=4;autoMeshGrid();
+  setMode('deform');goToFrame(0);addKeyframe();goToFrame(10);verts[6].x+=3;addKeyframe();goToFrame(0);setMode('select');true`);
+const scr=i=>ev(`(()=>{const r=canvas.getBoundingClientRect();const c=spriteToCanvas(verts[${i}].x,verts[${i}].y);return [r.left+c.x,r.top+c.y]})()`);
+const sc=await ev(`viewScale`);
+const snap=()=>ev(`JSON.stringify({v:verts,k:[...keyframes].map(([f,a])=>[f,[...a]])})`);
+
+console.log('Anim Mesh Forge — Select mode edits the mesh');
+const before=await snap(), u0=await ev(`undoStack.length`);
+const v=JSON.parse(before).v[6], kf10=await ev(`keyframes.get(10)[12]`);
+const [x,y]=await scr(6);
+await drag(x,y,x+2*sc,y+1*sc,6);
+const after=JSON.parse(await snap()).v[6];
+check('rest position moved by (+2,+1)', Math.abs(after.ox-(v.ox+2))<0.05 && Math.abs(after.oy-(v.oy+1))<0.05, JSON.stringify(after));
+check('current position moved with it (no deformation at frame 0)', Math.abs(after.x-after.ox)<0.05 && Math.abs(after.y-after.oy)<0.05);
+check('keyframes shifted by the same offset (deformation kept)', Math.abs(await ev(`keyframes.get(10)[12]`)-(kf10+2))<0.05 && Math.abs(await ev(`keyframes.get(0)[12]`)-(v.ox+2))<0.05);
+check('no keyframe added', await ev(`keyframes.size`)===2);
+check('one undo step', await ev(`undoStack.length`)===u0+1);
+await ev(`undo();true`);
+check('undo restores mesh + keyframes exactly', await snap()===before);
+
+console.log('Anim Mesh Forge — Deform drag undo');
+await ev(`setMode('deform');goToFrame(5);selIdx.clear();true`);
+const b2=await snap(), k2=await ev(`keyframes.size`);
+const [x2,y2]=await scr(9);
+await drag(x2,y2,x2-3*sc,y2,6);
+check('deform drag auto-keyframes frame 5', await ev(`keyframes.has(5)`) && await ev(`keyframes.size`)===k2+1);
+await ev(`undo();true`);
+check('single undo removes keyframe AND restores pose', await ev(`!keyframes.has(5)`) && await snap()===b2);
+
+console.log('Anim Mesh Forge — dragging a multi-selection');
+await ev(`setMode('select');selIdx=new Set([5,10]);render();true`);
+const a5=await ev(`verts[5].ox`), a10=await ev(`verts[10].ox`);
+const [x3,y3]=await scr(10);
+await drag(x3,y3,x3+1*sc,y3,4);
+check('both selected vertices moved', Math.abs(await ev(`verts[5].ox`)-(a5+1))<0.05 && Math.abs(await ev(`verts[10].ox`)-(a10+1))<0.05);
+check('no page exceptions', errors.length===0, errors.join(' | '));
+p.close(); done();

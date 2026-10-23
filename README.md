@@ -130,6 +130,12 @@ Deforms a single sprite over time using a mesh of vertices, instead of frame-by-
 
 ---
 
+## Tests
+
+`tests/` contains end-to-end tests that drive each tool in headless Chrome with real mouse and keyboard input — no npm install needed (Node 22+ and Chrome). Run them with `node tests/run.mjs`; see [tests/README.md](tests/README.md).
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
