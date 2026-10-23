@@ -1,6 +1,11 @@
 # Forge Suite
 
-A collection of self-contained, browser-based tools for pixel art and 2D game development. Each tool is a single HTML file with **zero external dependencies** — no CDN, no build step, no server. Just open the file in a modern browser.
+A collection of self-contained, browser-based tools for pixel art and 2D game development. Each tool is a single HTML file — no build step, no server. Just open the file in a modern browser.
+
+All tools work fully offline, with two exceptions:
+
+- **Sprite Forge** loads [JSZip](https://stuk.github.io/jszip/) 3.10.1 from cdnjs. It is needed to read ZIP input and to save the result, so this tool requires an internet connection.
+- **Particle Forge** loads its UI fonts (Space Grotesk, JetBrains Mono) from Google Fonts. Offline it falls back to system fonts and works normally.
 
 Designed for workflows compatible with engines like GameMaker, Phaser, and PixiJS.
 
@@ -8,23 +13,30 @@ Designed for workflows compatible with engines like GameMaker, Phaser, and PixiJ
 
 ## Pixel Forge
 
-*Pixel art editor.*
+*Pixel art editor and animator.* — `pixel-forge.html`
 
-A full-featured pixel art editor with a broad toolset:
+A full-featured pixel art editor with layers and frame-based animation:
 
-- Pencil, pixel-perfect pencil (no fat diagonal pixels), eraser, line, rectangle/ellipse (outline & filled), fill, eyedropper, rectangle select, magnifier
-- Dithered gradient fill
-- Artifact cleanup based on Connected Component Labeling (CCL)
-- Preset retro palettes plus custom color support, with image color-picking
-- Undo/redo
-- Zoom, fit-to-screen, and actual-size (1:1) view
-- Viewport-clipped overlay canvas for smooth performance on large canvases
+- **Drawing:** pencil, pixel-perfect pencil (no fat diagonal pixels), eraser, line, rectangle/ellipse (outline & filled), flood fill, dithered gradient (Bayer pattern, foreground → background), eyedropper, brush size/shape and custom brush stamps
+- **Text:** built-in 5×7 pixel font or system fonts
+- **Shading Ink:** shifts pixels lighter/darker along a color ramp picked from the palette
+- **Selection:** rectangle, lasso, magic wand (with tolerance), add/subtract modes; move, copy, cut, paste
+- **Layers:** add, duplicate, delete, reorder, merge down, flatten, per-layer visibility and opacity
+- **Animation:** frames (add/duplicate/delete, per-frame duration), named tags for frame ranges, onion skinning, playback preview
+- **Symmetry** (horizontal, vertical, both, 4-way) and **tile mode** for seamless textures
+- **Transforms:** flip, rotate 90°/180°, resize (nearest or bilinear), crop to content, one-click outline
+- **Palette:** retro presets (PICO-8, Game Boy, CGA, NES, DB16, DB32, Endesga 32, Lospec500 and more), palette from image, sorting, color count, find & replace color with tolerance
+- **Cleanup:** finds orphan pixels and small color islands with Connected Component Labeling (CCL) and fixes them one by one or all at once
+- Reference image overlay
+- Undo/redo of the whole document (pixels, layers, frames, transforms, resizes)
+- Zoom, fit-to-screen, magnifier, pixel grid
+- **Files:** open/save PNG, save/load projects as `.pfp` (layers, frames, tags), export a PNG sprite sheet (one per tag) and/or a ZIP of frames
 
 ---
 
 ## Sprite Forge
 
-*Pixel art palette converter.*
+*Pixel art palette converter.* — `sprite-forge.html` (needs internet, see above)
 
 Converts PNG animation frames to a target retro color palette:
 
@@ -40,7 +52,7 @@ Converts PNG animation frames to a target retro color palette:
 
 ## Particle Forge
 
-*2D particle effect editor.*
+*2D particle effect editor.* — `particle-editor-en.html`
 
 A comprehensive particle editor for game VFX:
 
@@ -50,40 +62,45 @@ A comprehensive particle editor for game VFX:
 - 11 built-in particle shapes plus animated spritesheet textures
 - Color randomization and independent X/Y scale curves over particle lifetime
 - Resizable stage, spritesheet/ZIP export, aspect-ratio locking, 1-bit alpha for retro effects
+- Effect presets (fire, smoke, explosion, rain, snow, fireworks, portal and more), project save/load as JSON, autosave in the browser
 
 ---
 
 ## Fluid Forge
 
-*2D fluid simulation.*
+*2D fluid simulation.* — `fluid-forge.html`
 
-A real-time fluid simulator (Jos Stam's stable fluids method: semi-Lagrangian advection, Jacobi pressure projection) for generating water/smoke-style effects:
+A real-time fluid simulator (Jos Stam's stable fluids method: semi-Lagrangian advection, pressure projection solved with Gauss–Seidel iterations) for generating smoke, fire, explosion, blood, magic and dust effects:
 
-- Configurable simulation speed, gravity, viscosity, and pressure iteration count
+- Presets for each effect type, with a 4-stop spawn color gradient that travels with the fluid
+- Configurable simulation speed, gravity, buoyancy, vorticity (swirl), viscosity, and pressure iteration count
 - Independent density diffusion, decay, and strength controls
 - Velocity strength and damping
 - Interactive mouse brush for injecting fluid directly into the simulation
 - Configurable boundary behavior
 - Separate controls for detail resolution vs. effect area / world size, so increasing world size doesn't just proportionally rescale motion
-- Spritesheet export with configurable columns, capture rate (every Nth frame), frame limit, and pixel size / alpha contrast controls for pixel-art-style output
+- Spritesheet export with configurable columns, capture rate (every Nth frame), frame limit and trimming to the shared content area; also exports frames as a ZIP
+- Exported frames are always 1 pixel per simulation cell (pixel-art-style output); "pixel size on screen" only changes the preview, and alpha contrast shapes the output alpha
 
 ---
 
 ## Anim Forge
 
-*Animation compositor.*
+*Animation compositor.* — `AnimForge.html`
 
 Assembles sprites and frames into multi-track animation sequences:
 
-- Multi-track timeline (segments per track) for compositing layered animations
-- Playback controls (play/pause, rewind) with configurable FPS and playback speed (px/frame)
-- Zoomable timeline view
+- Loads ZIPs of PNG frames (e.g. exported from the other Forge tools) as segments
+- 4-track timeline (segments per track) for compositing layered animations, with per-segment start frame, blend mode and opacity
+- Frame trimming (delete selected frames or the last N)
+- Playback controls (play/pause, rewind, loop) with configurable FPS, zoomable timeline and preview
+- Export of the composited animation as a ZIP of PNG frames, with optional nearest-neighbour upscaling
 
 ---
 
 ## Bone Forge
 
-*Pixel art skeletal animator.*
+*Pixel art skeletal animator.* — `bone-forge.html`
 
 A 2D skeletal animation tool built for pixel art sprites:
 
@@ -95,13 +112,14 @@ A 2D skeletal animation tool built for pixel art sprites:
 - Copy/paste pose between frames
 - Pan/zoom canvas navigation
 - Undo/redo
-- Project save/load as JSON
+- Project save/load as JSON (sprites embedded)
+- Export of an animation as a ZIP of PNG frames
 
 ---
 
 ## Anim Mesh Forge
 
-*Keyframe mesh animator.*
+*Keyframe mesh animator.* — `AnimMeshForge.html`
 
 Deforms a single sprite over time using a mesh of vertices, instead of frame-by-frame redrawing:
 
@@ -117,4 +135,4 @@ Deforms a single sprite over time using a mesh of vertices, instead of frame-by-
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
