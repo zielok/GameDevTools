@@ -380,7 +380,7 @@ label{color:var(--dim);font-size:13px;}
       <ul>
         <li><b>Click</b> — Select bone</li>
         <li><b>Double-click</b> — Rename bone inline</li>
-        <li><b>Drag &amp; Drop</b> — Re-parent a bone to another</li>
+        <li><b>Drag &amp; Drop</b> — Re-parent a bone to another (it keeps its position); drop it on empty space in the tree, or use <b>⇱ Make root</b>, to detach it</li>
         <li>Green dot = sprite attached, yellow dot = no sprite</li>
       </ul>
 
@@ -608,9 +608,10 @@ function boneWT(bone,frame){
   if(bone.parentId==null) return{wx:ip.x,wy:ip.y,wa:ip.angle};
   const par=getBone(bone.parentId);
   const pw=boneWT(par,frame);
-  // child root = parent tip in world space
+  // child root = parent tip + (x,y) offset in the parent's local space
   const parTip=boneWorldTip(par,frame);
-  return{wx:parTip.x+ip.x, wy:parTip.y+ip.y, wa:pw.wa+ip.angle};
+  const r=deg2rad(pw.wa), c=Math.cos(r), sn=Math.sin(r);
+  return{wx:parTip.x+ip.x*c-ip.y*sn, wy:parTip.y+ip.x*sn+ip.y*c, wa:pw.wa+ip.angle};
 }
 
 // World position of bone TIP = root + rotate(tipOffset, wa)
@@ -656,8 +657,15 @@ function solveIK(chain, targetWX, targetWY){
   const lastTip=boneWorldTip(chain[chain.length-1],frame);
   positions.push({x:lastTip.x, y:lastTip.y});
 
-  // lengths[i] = length of chain[i] bone
-  const lengths=chain.map(b=>b.length);
+  // Link i goes from root i to root i+1 (the last one to the tip). In bone i's local
+  // space that is its tip offset plus the next bone's offset from that tip — constant,
+  // so it gives both the link length and the angle between bone and link.
+  const links=chain.map((b,i)=>{
+    let x=b.tipDX??b.length, y=b.tipDY??0;
+    if(i<chain.length-1){ const ip=interpBone(chain[i+1].id,frame); x+=ip.x; y+=ip.y; }
+    return{x,y};
+  });
+  const lengths=links.map(v=>Math.hypot(v.x,v.y)||0.001);
 
   // Fixed base = root of first bone (stays in place)
   const base={x:positions[0].x, y:positions[0].y};
@@ -698,9 +706,9 @@ function solveIK(chain, targetWX, targetWY){
     const bone=chain[i];
     const p0=positions[i], p1=positions[i+1];
     const worldAngle=Math.atan2(p1.y-p0.y, p1.x-p0.x)*180/Math.PI;
-    const tipLocalAngle=Math.atan2(bone.tipDY??0, bone.tipDX??bone.length)*180/Math.PI;
+    const linkLocalAngle=Math.atan2(links[i].y, links[i].x)*180/Math.PI;
     const parWA=bone.parentId!=null?boneWT(getBone(bone.parentId),frame).wa:0;
-    const localAngle=worldAngle-tipLocalAngle-parWA;
+    const localAngle=worldAngle-linkLocalAngle-parWA;
     // Apply: update keyframe or rest pose
     const prevSel=S.selBone;
     S.selBone=bone.id;
@@ -1101,6 +1109,45 @@ $('#pi-center').onclick=()=>{
   piState.pivX=piState.sp.trimW/2;piState.pivY=piState.sp.trimH/2;drawPivotInspector();
 };
 
+// -- REPARENT ------------------------------------
+// Changes a bone's parent (null = make it a root bone) while keeping it where it
+// is. Its world transform is captured under the old hierarchy and re-expressed in
+// the new parent's local space — for the rest pose and, in every animation, at
+// each frame that has a keyframe of the bone itself or of any of its old/new
+// ancestors (keys are added there if needed, so motion the bone used to inherit
+// from its parent is kept). Its children follow, since they are local to it.
+function reparentBone(bone,newParentId){
+  if(!bone||bone.parentId===newParentId)return;
+  pushUndo();
+  const ancestorsOf=id=>{const out=[];let b=getBone(id);while(b&&b.parentId!=null){b=getBone(b.parentId);if(b)out.push(b.id);}return out;};
+  const related=new Set([bone.id,...ancestorsOf(bone.id),...(newParentId!=null?[newParentId,...ancestorsOf(newParentId)]:[])]);
+  const saved=S.anim;
+  S.anim=null; const restW=boneWT(bone,0);
+  const targets=[]; // {a,f,w,ease}
+  for(const a of S.anims){
+    S.anim=a;
+    const frames=[...new Set(a.keyframes.filter(k=>related.has(k.boneId)).map(k=>k.frame))].sort((x,y)=>x-y);
+    for(const f of frames) targets.push({a,f,w:boneWT(bone,f),ease:easeForNewKey(bone.id,f)});
+  }
+  bone.parentId=newParentId;
+  const toLocal=(w,frame)=>{
+    if(newParentId==null) return{x:w.wx,y:w.wy,angle:w.wa};
+    const par=getBone(newParentId), pw=boneWT(par,frame), tip=boneWorldTip(par,frame);
+    const r=deg2rad(-pw.wa), c=Math.cos(r), sn=Math.sin(r), dx=w.wx-tip.x, dy=w.wy-tip.y;
+    return{x:dx*c-dy*sn, y:dx*sn+dy*c, angle:w.wa-pw.wa};
+  };
+  S.anim=null; Object.assign(bone,toLocal(restW,0));
+  for(const {a,f,w,ease} of targets){
+    S.anim=a;
+    let k=a.keyframes.find(k=>k.boneId===bone.id&&k.frame===f);
+    if(!k){ k={frame:f,boneId:bone.id,angle:0,x:0,y:0,ease}; a.keyframes.push(k); }
+    Object.assign(k,toLocal(w,f));
+  }
+  S.anim=saved;
+  renderBoneTree();renderProps();renderZOrder();renderVP();renderTL();
+  setstatus(newParentId==null?`"${bone.name}" is now a root bone`:`"${bone.name}" is now a child of "${getBone(newParentId).name}"`);
+}
+
 // -- SPRITE LIST ---------------------------------
 function renderSpriteList(){
   const wrap=$('#sprite-list');wrap.innerHTML='';
@@ -1167,18 +1214,26 @@ function renderBoneTree(){
     div.addEventListener('dragover',e=>{e.preventDefault();div.classList.add('dragover');});
     div.addEventListener('dragleave',()=>div.classList.remove('dragover'));
     div.addEventListener('drop',e=>{
-      e.preventDefault();div.classList.remove('dragover');
+      e.preventDefault();e.stopPropagation(); // don't also trigger the "drop on empty space" handler
+      div.classList.remove('dragover');
       const did=parseInt(e.dataTransfer.getData('bid'));
       if(did===bone.id)return;
       let cur=bone.id;while(cur!=null){if(cur===did)return;cur=getBone(cur)?.parentId??null;}
-      pushUndo();
-      getBone(did).parentId=bone.id;renderBoneTree();renderVP();renderTL();
+      reparentBone(getBone(did),bone.id);
     });
     wrap.appendChild(div);
     S.bones.filter(b=>b.parentId===bone.id).forEach(ch=>node(ch,depth+1));
   }
   S.bones.filter(b=>b.parentId==null).forEach(b=>node(b,0));
 }
+
+// Dropping a bone on empty space in the tree makes it a root bone
+$('#bone-tree-wrap').addEventListener('dragover',e=>{e.preventDefault();});
+$('#bone-tree-wrap').addEventListener('drop',e=>{
+  e.preventDefault();
+  const b=getBone(parseInt(e.dataTransfer.getData('bid')));
+  if(b&&b.parentId!=null)reparentBone(b,null);
+});
 
 // -- PROPS PANEL ---------------------------------
 function renderProps(){
@@ -1195,8 +1250,8 @@ function renderProps(){
   <div class="pr"><label>Name</label><input id="p-nm" type="text" value="${bone.name}"></div>
   <div class="pr"><label>Length</label><input id="p-ln" type="number" value="${bone.length.toFixed(1)}" min="1" title="Bone length in pixels"></div>
 
-  <div style="border-top:1px solid var(--border);padding-top:4px;font-size:9px;color:var(--dim);letter-spacing:1px;">TRANSFORM${isChild?' (local -- relative to parent tip)':' (world)'}</div>
-  ${isChild?'':`<div class="pr"><label>X</label><input id="p-x" type="number" value="${ip.x.toFixed(1)}"><label style="margin-left:4px">Y</label><input id="p-y" type="number" value="${ip.y.toFixed(1)}"></div>`}
+  <div style="border-top:1px solid var(--border);padding-top:4px;font-size:9px;color:var(--dim);letter-spacing:1px;">TRANSFORM${isChild?' (local -- offset from parent tip)':' (world)'}</div>
+  ${`<div class="pr"><label>X</label><input id="p-x" type="number" value="${ip.x.toFixed(1)}"><label style="margin-left:4px">Y</label><input id="p-y" type="number" value="${ip.y.toFixed(1)}"></div>`}
   <div class="pr"><label>Angle</label><input id="p-a" type="number" value="${ip.angle.toFixed(1)}" style="width:58px"><span style="color:var(--dim)">°</span></div>
 
   <div style="border-top:1px solid var(--border);padding-top:4px;font-size:9px;color:var(--dim);letter-spacing:1px;">SPRITE</div>
@@ -1213,6 +1268,7 @@ function renderProps(){
 
   <div class="pr" style="gap:4px;margin-top:2px;">
     <button id="p-child">+ Child bone</button>
+    ${isChild?'<button id="p-root" title="Detach from the parent (keeps its position)">⇱ Make root</button>':''}
     <button id="p-del" class="danger">✕ Delete</button>
   </div>`;
 
@@ -1230,11 +1286,12 @@ function renderProps(){
     bone.length=len;
     renderVP();
   };
-  if(!isChild){
+  {
     const xUndo=undoOnce($('#p-x')), yUndo=undoOnce($('#p-y'));
     $('#p-x').oninput=e=>{xUndo();setInterp('x',+e.target.value);};
     $('#p-y').oninput=e=>{yUndo();setInterp('y',+e.target.value);};
   }
+  if(isChild)$('#p-root').onclick=()=>reparentBone(bone,null);
   const aUndo=undoOnce($('#p-a'));
   $('#p-a').oninput=e=>{aUndo();setInterp('angle',+e.target.value);};
   $('#p-sp').onchange=e=>{
