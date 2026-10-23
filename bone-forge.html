@@ -476,8 +476,10 @@ function snapshotState(){
     selBone: S.selBone,
   };
 }
-function pushUndo(){
-  undoStack.push(snapshotState());
+// snap: optional state captured earlier (e.g. before a bone draft that
+// only becomes a real change once it is confirmed)
+function pushUndo(snap=snapshotState()){
+  undoStack.push(snap);
   if(undoStack.length>UNDO_MAX)undoStack.shift();
   redoStack=[];
   updateUndoButtons();
@@ -1034,7 +1036,10 @@ piCanvas.addEventListener('mouseup',()=>{if(piState)piState.dragging=null;});
 
 $('#pi-ok').onclick=()=>{
   if(!piState)return;
-  const{bone,pivX,pivY,endX,endY}=piState;
+  pushUndo();
+  // undo may have replaced S.bones with clones since the inspector opened
+  const bone=getBone(piState.bone.id)||piState.bone;
+  const{pivX,pivY,endX,endY}=piState;
   // Save pivot (attachment point)
   bone.pivotX=pivX;
   bone.pivotY=pivY;
@@ -1074,6 +1079,7 @@ function renderSpriteList(){
       // assign to selected bone
       const bone=getBone(S.selBone);
       if(bone){
+        pushUndo();
         bone.spriteId=sp.id;
         if(bone.pivotX==null){bone.pivotX=sp.trimW/2;bone.pivotY=sp.trimH/2;}
         renderBoneTree();renderProps();renderVP();
@@ -1107,6 +1113,7 @@ function renderBoneTree(){
       lbl.replaceWith(inp);inp.focus();inp.select();
       const commit=()=>{
         const v=inp.value.trim()||bone.name;
+        if(v!==bone.name)pushUndo();
         bone.name=v;renderBoneTree();renderProps();renderZOrder();
       };
       inp.addEventListener('blur',commit);
@@ -1124,7 +1131,8 @@ function renderBoneTree(){
       const did=parseInt(e.dataTransfer.getData('bid'));
       if(did===bone.id)return;
       let cur=bone.id;while(cur!=null){if(cur===did)return;cur=getBone(cur)?.parentId??null;}
-      getBone(did).parentId=bone.id;renderBoneTree();renderVP();
+      pushUndo();
+      getBone(did).parentId=bone.id;renderBoneTree();renderVP();renderTL();
     });
     wrap.appendChild(div);
     S.bones.filter(b=>b.parentId===bone.id).forEach(ch=>node(ch,depth+1));
@@ -1170,7 +1178,8 @@ function renderProps(){
 
   // one undo step per focus session of a field, not one per keystroke
   const undoOnce=el=>{let done=false;el.addEventListener('focus',()=>{done=false;});return()=>{if(!done){pushUndo();done=true;}};};
-  $('#p-nm').oninput=e=>{bone.name=e.target.value;renderBoneTree();};
+  const nmUndo=undoOnce($('#p-nm'));
+  $('#p-nm').oninput=e=>{nmUndo();bone.name=e.target.value;renderBoneTree();};
   const lnUndo=undoOnce($('#p-ln'));
   $('#p-ln').oninput=e=>{
     lnUndo();
@@ -1189,6 +1198,7 @@ function renderProps(){
   const aUndo=undoOnce($('#p-a'));
   $('#p-a').oninput=e=>{aUndo();setInterp('angle',+e.target.value);};
   $('#p-sp').onchange=e=>{
+    pushUndo();
     bone.spriteId=e.target.value?parseInt(e.target.value):null;
     if(bone.spriteId!=null){
       const s=S.sprites.find(sp2=>sp2.id===bone.spriteId);
@@ -1216,7 +1226,7 @@ function deleteBone(id){
   const del=[id];let changed=true;
   while(changed){changed=false;S.bones.forEach(b=>{if(b.parentId!=null&&del.includes(b.parentId)&&!del.includes(b.id)){del.push(b.id);changed=true;}});}
   S.bones=S.bones.filter(b=>!del.includes(b.id));
-  if(S.anim)S.anim.keyframes=S.anim.keyframes.filter(k=>!del.includes(k.boneId));
+  S.anims.forEach(a=>{a.keyframes=a.keyframes.filter(k=>!del.includes(k.boneId));});
   if(del.includes(S.selBone))S.selBone=null;
   renderBoneTree();renderProps();renderVP();renderTL();renderZOrder();
 }
@@ -1289,6 +1299,7 @@ function renderAnimList(){
       nm.replaceWith(inp);inp.focus();inp.select();
       const commit=()=>{
         const v=inp.value.trim()||a.name;
+        if(v!==a.name)pushUndo();
         a.name=v;syncAnimCfg();renderAnimList();
       };
       inp.addEventListener('blur',commit);
@@ -1312,11 +1323,11 @@ function renderZOrder(){
     div.innerHTML=`<span class="zo-num">${i+1}</span><span class="zo-dot${hasSp?' sp':''}"></span><span class="zo-name">${bone.name}</span><span class="zo-btns"><button class="zo-up" title="Move up (renders below)">↑</button><button class="zo-dn" title="Move down (renders above)">↓</button></span>`;
     div.querySelector('.zo-up').onclick=e=>{
       e.stopPropagation();
-      if(i>0){[S.bones[i-1],S.bones[i]]=[S.bones[i],S.bones[i-1]];renderZOrder();renderBoneTree();renderVP();}
+      if(i>0){pushUndo();[S.bones[i-1],S.bones[i]]=[S.bones[i],S.bones[i-1]];renderZOrder();renderBoneTree();renderVP();}
     };
     div.querySelector('.zo-dn').onclick=e=>{
       e.stopPropagation();
-      if(i<S.bones.length-1){[S.bones[i+1],S.bones[i]]=[S.bones[i],S.bones[i+1]];renderZOrder();renderBoneTree();renderVP();}
+      if(i<S.bones.length-1){pushUndo();[S.bones[i+1],S.bones[i]]=[S.bones[i],S.bones[i+1]];renderZOrder();renderBoneTree();renderVP();}
     };
     div.addEventListener('click',()=>{S.selBone=bone.id;renderBoneTree();renderZOrder();renderProps();renderVP();});
     wrap.appendChild(div);
@@ -1578,10 +1589,11 @@ vpC.addEventListener('mousedown',e=>{
     length:40,angle:0, tipDX:40, tipDY:0,
     x:parentId!=null?0:wx,y:parentId!=null?0:wy,
     spriteId:null,pivotX:null,pivotY:null};
+    const preSnap=snapshotState(); // becomes an undo step only if the draft is confirmed
     S.bones.push(bone);S.selBone=bone.id;
 
     // Store drag state so mousemove updates length+angle live
-    S.boneDraft={bone, startWX, startWY, parentId};
+    S.boneDraft={bone, startWX, startWY, parentId, preSnap};
     renderBoneTree();renderProps();renderVP();
     setstatus('Drag to set bone direction and length, release to confirm');
     return;
@@ -1725,6 +1737,7 @@ vpC.addEventListener('mouseup',e=>{
       setstatus('Drag from the start point to set length and direction');
     }else{
       // Confirmed -- switch back to select mode
+      pushUndo(S.boneDraft.preSnap);
       S.mode='sel';setModeBtns();
       renderTL();
       setstatus(`Bone "${bone.name}" ready -- assign a sprite in Properties`);
@@ -1854,13 +1867,16 @@ $('#tl-next').onclick=()=>{const mx=S.anim?S.anim.frameCount-1:0;S.frame=Math.mi
 $('#tl-zoom').oninput=e=>{S.tlZoom=+e.target.value;renderTL();};
 $('#tl-delkey').onclick=()=>{
   if(!S.anim||S.selBone==null)return;
-  const before=S.anim.keyframes.length;
-  S.anim.keyframes=S.anim.keyframes.filter(k=>!(k.boneId===S.selBone&&k.frame===S.frame));
-  setstatus(S.anim.keyframes.length<before?`Keyframe removed @ frame ${S.frame}`:'No keyframe here');
+  const hit=k=>k.boneId===S.selBone&&k.frame===S.frame;
+  if(!S.anim.keyframes.some(hit)){setstatus('No keyframe here');return;}
+  pushUndo();
+  S.anim.keyframes=S.anim.keyframes.filter(k=>!hit(k));
+  setstatus(`Keyframe removed @ frame ${S.frame}`);
   renderTL();
 };
 $('#btn-addkey').onclick=()=>{
   if(!S.anim||S.selBone==null){setstatus('Select an animation and a bone first');return;}
+  pushUndo();
   const b=getBone(S.selBone),cur=interpBone(b.id,S.frame);
   const ex=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
   if(ex){ex.angle=cur.angle;ex.x=cur.x;ex.y=cur.y;}
@@ -1869,6 +1885,7 @@ $('#btn-addkey').onclick=()=>{
 };
 $('#btn-addpose').onclick=()=>{
   if(!S.anim){setstatus('Create an animation first');return;}
+  pushUndo();
   S.bones.forEach(b=>{
     const cur=interpBone(b.id,S.frame);
     const ex=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
@@ -1884,10 +1901,12 @@ $('#btn-new-anim').onclick=()=>showModal('New Animation',[
   {id:'m-fc',label:'Frames',type:'number',val:'24'},
 ],()=>{
   const a={id:uid(),name:$('#m-nm').value||'anim',frameCount:Math.max(1,parseInt($('#m-fc').value)||24),loop:true,keyframes:[]};
+  pushUndo();
   S.anims.push(a);S.anim=a;S.frame=0;syncAnimCfg();renderAnimList();renderTL();renderVP();
 });
 $('#btn-upd-anim').onclick=()=>{
   if(!S.anim)return;
+  pushUndo();
   S.anim.name=$('#an-name').value||S.anim.name;
   S.anim.frameCount=Math.max(1,parseInt($('#an-frames').value)||24);
   S.anim.loop=$('#an-loop').checked;
