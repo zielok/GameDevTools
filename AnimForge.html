@@ -51,6 +51,7 @@
     padding: 3px 9px; border-radius: 4px; cursor: pointer; font-size: 12px;
   }
   button.tb-btn:hover { background: var(--border); }
+  button.tb-btn:disabled { opacity: .4; cursor: default; }
   button.tb-btn.accent { background: #1a3a1a; border-color: var(--accent2); color: var(--accent2); }
   button.tb-btn.accent:hover { background: #254025; }
   #status { margin-left: auto; font-size: 11px; color: var(--text-dim); font-family: var(--mono); max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -111,6 +112,8 @@
     transition: filter .1s; user-select: none;
   }
   .seg-block:hover { filter: brightness(1.25); }
+  .seg-block { cursor: grab; }
+  .seg-block.dragging { cursor: grabbing; opacity: .85; z-index: 10; }
   .seg-block.selected { border-color: #fff; border-width: 2px; filter: brightness(1.3); }
   .seg-block .seg-name { font-size: 10px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .seg-block .seg-info { font-size: 9px; color: rgba(255,255,255,.6); font-family: var(--mono); }
@@ -218,6 +221,12 @@
     <label class="tb-label">px/frame</label>
   </div>
   <div class="tb-sep"></div>
+  <button class="tb-btn" id="undo-btn" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+  <button class="tb-btn" id="redo-btn" title="Redo (Ctrl+Shift+Z / Ctrl+Y)" disabled>↷ Redo</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="open-proj-btn" title="Open an Anim Forge project (.json)">Open Project</button>
+  <button class="tb-btn" id="save-proj-btn" title="Save the project (segments, frames, settings) as .json">Save Project</button>
+  <div class="tb-sep"></div>
   <button class="tb-btn" id="clear-btn">Clear All</button>
   <span id="status">Ready</span>
 </div>
@@ -296,6 +305,7 @@
 
 <!-- HIDDEN FILE INPUT -->
 <input type="file" id="file-input" accept=".zip" style="display:none">
+<input type="file" id="proj-input" accept=".json,application/json" style="display:none">
 
 <script>
 // ═══════════════════════════════════════════════════════════════
@@ -514,6 +524,7 @@ function makeThumbnail(img) {
 // ═══════════════════════════════════════════════════════════════
 async function loadZipToTrack(file, trackIdx) {
   setStatus(`Loading ${file.name}…`);
+  const before = snapshotDoc(); // recorded only if the load succeeds
   try {
     const ab = await file.arrayBuffer();
     const zipFiles = await parseZip(ab);
@@ -553,6 +564,7 @@ async function loadZipToTrack(file, trackIdx) {
       seg.startFrame = last.startFrame + last.frames.length;
     }
     track.push(seg);
+    pushUndo(before);
 
     recalcTotal();
     renderTimeline();
@@ -563,6 +575,72 @@ async function loadZipToTrack(file, trackIdx) {
     console.error(e);
     setStatus('Error loading ZIP: ' + e.message);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  UNDO / REDO
+// ═══════════════════════════════════════════════════════════════
+// A snapshot is the document: canvas size + every segment. Frame objects
+// ({img, thumb}) are never modified once loaded, so segments only need a
+// shallow copy of their frame list. FPS / zoom are view settings, not tracked.
+const UNDO_MAX = 100;
+const undoStack = [], redoStack = [];
+
+function snapshotDoc() {
+  return {
+    canvasW: state.canvasW, canvasH: state.canvasH,
+    tracks: state.tracks.map(t => t.map(s => ({...s, frames: [...s.frames]}))),
+  };
+}
+function restoreDoc(d) {
+  const selId = state.selectedSeg ? state.tracks[state.selectedSeg.trackIdx][state.selectedSeg.segIdx]?.id : null;
+  const sizeChanged = d.canvasW !== state.canvasW || d.canvasH !== state.canvasH;
+  state.canvasW = d.canvasW; state.canvasH = d.canvasH;
+  state.tracks = d.tracks.map(t => t.map(s => ({...s, frames: [...s.frames]})));
+  state.selectedFrames = new Set();
+  recalcTotal();
+  state.currentFrame = Math.min(state.currentFrame, state.totalFrames - 1);
+  if (sizeChanged) applyPreviewZoom(previewZoom);
+  const loc = selId != null ? locateSegment(selId) : null;
+  if (loc) selectSegment(loc.trackIdx, loc.segIdx);
+  else { state.selectedSeg = null; showEmptyProps(); renderTimeline(); }
+  renderFrame(state.currentFrame);
+}
+// Call BEFORE a change (pass a snapshot taken earlier to record that state instead)
+function pushUndo(snap = snapshotDoc()) {
+  undoStack.push(snap);
+  if (undoStack.length > UNDO_MAX) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoButtons();
+}
+function undo() {
+  if (!undoStack.length) return;
+  stopPlay();
+  redoStack.push(snapshotDoc());
+  restoreDoc(undoStack.pop());
+  updateUndoButtons(); setStatus('Undo');
+}
+function redo() {
+  if (!redoStack.length) return;
+  stopPlay();
+  undoStack.push(snapshotDoc());
+  restoreDoc(redoStack.pop());
+  updateUndoButtons(); setStatus('Redo');
+}
+function resetHistory() { undoStack.length = 0; redoStack.length = 0; updateUndoButtons(); }
+function updateUndoButtons() {
+  document.getElementById('undo-btn').disabled = !undoStack.length;
+  document.getElementById('redo-btn').disabled = !redoStack.length;
+}
+function locateSegment(id) {
+  for (let ti = 0; ti < state.tracks.length; ti++) {
+    const si = state.tracks[ti].findIndex(s => s.id === id);
+    if (si >= 0) return {trackIdx: ti, segIdx: si};
+  }
+  return null;
+}
+function showEmptyProps() {
+  propBody.innerHTML = '<div id="prop-empty">Click a segment<br>to edit its properties</div>';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -700,7 +778,13 @@ function renderTimeline() {
       block.style.left = (seg.startFrame * z) + 'px';
       block.style.width = (seg.frames.length * z) + 'px';
       block.innerHTML = `<div class="seg-name">${escapeHtml(seg.name)}</div><div class="seg-info">${seg.frames.length}f · ${seg.blend}</div>`;
-      block.addEventListener('click', e => { e.stopPropagation(); selectSegment(ti, si); });
+      block.addEventListener('click', e => { e.stopPropagation(); if (!suppressClick) selectSegment(ti, si); });
+      block.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        e.stopPropagation(); e.preventDefault();
+        segDrag = {seg, startX: e.clientX, startY: e.clientY, origStart: seg.startFrame, moved: false};
+      });
+      if (segDrag && segDrag.moved && segDrag.seg === seg) block.classList.add('dragging');
       row.appendChild(block);
     }
   });
@@ -721,10 +805,53 @@ function updatePlayhead() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  SEGMENT DRAG — horizontally changes the start frame, vertically the track
+// ═══════════════════════════════════════════════════════════════
+let segDrag = null;
+let suppressClick = false; // the click that ends a drag must not select / scrub
+
+window.addEventListener('mousemove', e => {
+  if (!segDrag) return;
+  const dx = e.clientX - segDrag.startX, dy = e.clientY - segDrag.startY;
+  if (!segDrag.moved) {
+    if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+    segDrag.moved = true;
+    pushUndo(); // state before the drag
+  }
+  const seg = segDrag.seg;
+  seg.startFrame = Math.max(0, segDrag.origStart + Math.round(dx / state.zoom));
+  // track under the cursor (stay on the current one when outside the rows)
+  const from = locateSegment(seg.id);
+  let toTrack = from.trackIdx;
+  trackRows.forEach((row, ti) => {
+    const r = row.getBoundingClientRect();
+    if (e.clientY >= r.top && e.clientY < r.bottom) toTrack = ti;
+  });
+  if (toTrack !== from.trackIdx) {
+    state.tracks[from.trackIdx].splice(from.segIdx, 1);
+    state.tracks[toTrack].push(seg);
+  }
+  recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
+});
+window.addEventListener('mouseup', () => {
+  if (!segDrag) return;
+  const {seg, moved} = segDrag;
+  segDrag = null;
+  if (!moved) return; // a plain click: the click handler selects it
+  // keep each track ordered by start frame (so "+" still appends after the last one)
+  state.tracks.forEach(t => t.sort((a, b) => a.startFrame - b.startFrame));
+  const loc = locateSegment(seg.id);
+  selectSegment(loc.trackIdx, loc.segIdx);
+  renderFrame(state.currentFrame);
+  suppressClick = true; setTimeout(() => { suppressClick = false; }, 0);
+  setStatus(`Moved: ${seg.name} → Track ${loc.trackIdx+1}, frame ${seg.startFrame}`);
+});
+
+// ═══════════════════════════════════════════════════════════════
 //  TIMELINE CLICK → SCRUB
 // ═══════════════════════════════════════════════════════════════
 document.getElementById('tl-scroll').addEventListener('click', e => {
-  if (e.target.closest('.seg-block')) return;
+  if (suppressClick || e.target.closest('.seg-block')) return;
   const rect = timelineScroll.getBoundingClientRect();
   const x = e.clientX - rect.left + timelineScroll.scrollLeft;
   const f = Math.floor(x / state.zoom);
@@ -803,16 +930,25 @@ function buildPropPanel() {
   // Populate frames list
   buildFramesList();
 
-  // Events
-  document.getElementById('p-name').addEventListener('input', e => { seg.name = e.target.value; renderTimeline(); });
+  // Events — one undo step per edit (the name field: per focus session, not per keystroke)
+  const nameEl = document.getElementById('p-name');
+  let nameUndone = false;
+  nameEl.addEventListener('focus', () => { nameUndone = false; });
+  nameEl.addEventListener('input', e => {
+    if (!nameUndone) { pushUndo(); nameUndone = true; }
+    seg.name = e.target.value; renderTimeline();
+  });
   document.getElementById('p-start').addEventListener('change', e => {
+    pushUndo();
     seg.startFrame = Math.max(0, parseInt(e.target.value)||0);
     recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
   });
   document.getElementById('p-blend').addEventListener('change', e => {
+    pushUndo();
     seg.blend = e.target.value; renderTimeline(); renderFrame(state.currentFrame);
   });
   document.getElementById('p-opacity').addEventListener('change', e => {
+    pushUndo();
     seg.opacity = Math.max(0, Math.min(1, parseFloat(e.target.value)||1));
     renderFrame(state.currentFrame);
   });
@@ -826,20 +962,23 @@ function buildPropPanel() {
   });
   document.getElementById('del-frames-btn').addEventListener('click', () => {
     if (!state.selectedFrames.size) return;
+    pushUndo();
     seg.frames = seg.frames.filter((_,i) => !state.selectedFrames.has(i));
     state.selectedFrames = new Set();
-    if (!seg.frames.length) { deleteSelectedSegment(); return; }
+    if (!seg.frames.length) { deleteSelectedSegment(false); return; }
     recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
     buildPropPanel();
   });
   document.getElementById('del-last-btn').addEventListener('click', () => {
     const n = parseInt(document.getElementById('del-n').value)||10;
+    if (seg.frames.length <= 1) return;
+    pushUndo();
     seg.frames = seg.frames.slice(0, Math.max(1, seg.frames.length - n));
     state.selectedFrames = new Set();
     recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
     buildPropPanel();
   });
-  document.getElementById('del-seg-btn').addEventListener('click', deleteSelectedSegment);
+  document.getElementById('del-seg-btn').addEventListener('click', () => deleteSelectedSegment());
 }
 
 function buildFramesList() {
@@ -869,12 +1008,13 @@ function buildFramesList() {
   });
 }
 
-function deleteSelectedSegment() {
+function deleteSelectedSegment(withUndo = true) {
   const {trackIdx, segIdx} = state.selectedSeg;
+  if (withUndo) pushUndo();
   state.tracks[trackIdx].splice(segIdx, 1);
   state.selectedSeg = null;
   state.selectedFrames = new Set();
-  propBody.innerHTML = '<div id="prop-empty">Click a segment<br>to edit its properties</div>';
+  showEmptyProps();
   recalcTotal(); renderTimeline(); renderFrame(state.currentFrame);
 }
 
@@ -900,13 +1040,14 @@ document.getElementById('fps-input').addEventListener('change', e => { state.fps
 document.getElementById('zoom-input').addEventListener('change', e => { state.zoom = Math.max(1, parseInt(e.target.value)||4); renderTimeline(); });
 document.getElementById('clear-btn').addEventListener('click', () => {
   stopPlay();
+  if (state.tracks.some(t => t.length)) pushUndo();
   state.tracks = [[],[],[],[]];
   state.selectedSeg = null;
   state.totalFrames = 0;
   state.currentFrame = 0;
   state.selectedFrames = new Set();
   state.canvasW = 320; state.canvasH = 180;
-  propBody.innerHTML = '<div id="prop-empty">Click a segment<br>to edit its properties</div>';
+  showEmptyProps();
   renderTimeline();
   applyPreviewZoom(1); // resizes the preview canvas and re-renders frame 0 / counters
   setStatus('Cleared');
@@ -932,7 +1073,15 @@ fileInput.addEventListener('change', async e => {
 
 // Keyboard
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.ctrlKey || e.metaKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    else if (k === 's') { e.preventDefault(); saveProject(); }
+    return;
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedSeg) { e.preventDefault(); deleteSelectedSegment(); }
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   if (e.code === 'ArrowRight') { stopPlay(); state.currentFrame = Math.min(state.currentFrame+1, state.totalFrames-1); renderFrame(state.currentFrame); updatePlayhead(); }
   if (e.code === 'ArrowLeft')  { stopPlay(); state.currentFrame = Math.max(state.currentFrame-1, 0); renderFrame(state.currentFrame); updatePlayhead(); }
@@ -1087,6 +1236,85 @@ async function exportZip() {
   modal.classList.remove('open');
   setStatus(`Exported ${state.totalFrames} frames`);
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  PROJECT SAVE / LOAD (.json, frames embedded as PNG data URLs)
+// ═══════════════════════════════════════════════════════════════
+function frameToDataURL(img) {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+  c.getContext('2d').drawImage(img, 0, 0);
+  return c.toDataURL('image/png');
+}
+function saveProject() {
+  if (!state.tracks.some(t => t.length)) { setStatus('Nothing to save'); return; }
+  const urlOf = new Map(); // a frame shared by several segments is encoded once
+  const proj = {
+    app: 'AnimForge', version: 1,
+    fps: state.fps, loop: state.loop, canvasW: state.canvasW, canvasH: state.canvasH,
+    tracks: state.tracks.map(t => t.map(s => ({
+      name: s.name, startFrame: s.startFrame, blend: s.blend, opacity: s.opacity,
+      frames: s.frames.map(fr => { if (!urlOf.has(fr)) urlOf.set(fr, frameToDataURL(fr.img)); return urlOf.get(fr); }),
+    }))),
+  };
+  const blob = new Blob([JSON.stringify(proj)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'anim-forge-project.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  setStatus('Project saved → anim-forge-project.json');
+}
+function loadImageURL(url) {
+  return new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('bad frame image')); img.src = url; });
+}
+async function loadProject(file) {
+  let proj;
+  try { proj = JSON.parse(await file.text()); } catch { setStatus('Error: not a valid JSON file'); return; }
+  if (proj.app !== 'AnimForge' || !Array.isArray(proj.tracks)) { setStatus('Error: not an Anim Forge project'); return; }
+  stopPlay();
+  setStatus('Loading project…');
+  try {
+    const cache = new Map(); // identical data URLs → one shared frame object
+    const tracks = [[], [], [], []];
+    for (let ti = 0; ti < Math.min(4, proj.tracks.length); ti++) {
+      for (const sd of proj.tracks[ti]) {
+        const frames = [];
+        for (const url of sd.frames) {
+          if (!cache.has(url)) { const img = await loadImageURL(url); cache.set(url, {img, thumb: makeThumbnail(img)}); }
+          frames.push(cache.get(url));
+        }
+        const seg = createSegment(sd.name || 'segment', frames);
+        seg.startFrame = Math.max(0, sd.startFrame | 0);
+        seg.blend = BLEND_MODES.some(([v]) => v === sd.blend) ? sd.blend : 'source-over';
+        seg.opacity = Number.isFinite(+sd.opacity) ? Math.max(0, Math.min(1, +sd.opacity)) : 1;
+        if (frames.length) tracks[ti].push(seg);
+      }
+    }
+    state.tracks = tracks;
+    state.canvasW = proj.canvasW || 320; state.canvasH = proj.canvasH || 180;
+    state.fps = Math.max(1, proj.fps | 0 || 30);
+    state.loop = proj.loop !== false;
+    document.getElementById('fps-input').value = state.fps;
+    document.getElementById('loop-toggle').checked = state.loop;
+    state.selectedSeg = null; state.selectedFrames = new Set(); state.currentFrame = 0;
+    showEmptyProps();
+    resetHistory();
+    recalcTotal(); renderTimeline();
+    applyPreviewZoom(previewZoom); setTimeout(fitPreview, 80);
+    const n = tracks.reduce((a, t) => a + t.length, 0);
+    setStatus(`Project loaded — ${n} segment${n === 1 ? '' : 's'}, ${state.totalFrames} frames`);
+  } catch (e) {
+    console.error(e);
+    setStatus('Error loading project: ' + e.message);
+  }
+}
+document.getElementById('save-proj-btn').addEventListener('click', saveProject);
+document.getElementById('open-proj-btn').addEventListener('click', () => document.getElementById('proj-input').click());
+document.getElementById('proj-input').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (f) await loadProject(f);
+});
+document.getElementById('undo-btn').addEventListener('click', undo);
+document.getElementById('redo-btn').addEventListener('click', redo);
 
 document.getElementById('modal-close').addEventListener('click', () => {
   document.getElementById('modal-overlay').classList.remove('open');
