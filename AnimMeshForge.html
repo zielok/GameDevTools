@@ -234,7 +234,7 @@ select option{background:var(--panel2)}
 
     <div class="ss">
       <h3>Interpolation</h3>
-      <select class="easing-select" id="sel-easing">
+      <select class="easing-select" id="sel-easing" onchange="setSegmentEasing(this.value)" title="Easing of the segment under the playhead (from its keyframe to the next one)">
         <option value="linear">Linear</option>
         <option value="ease-in">Ease In</option>
         <option value="ease-out">Ease Out</option>
@@ -243,6 +243,7 @@ select option{background:var(--panel2)}
         <option value="elastic">Elastic</option>
         <option value="step">Step (no interp)</option>
       </select>
+      <div id="easing-target" style="font-size:10px;color:var(--muted);margin-top:4px"></div>
     </div>
 
     <div class="ss">
@@ -403,7 +404,8 @@ select option{background:var(--panel2)}
       <div class="help-step-body">
         Press <b>Space</b> to play/stop. Use ◀ ▶ buttons or ← → arrow keys to step through frames.
         Click anywhere on the Timeline ruler to jump to that frame.
-        The mesh is interpolated between keyframes using the easing curve set in the sidebar.
+        The mesh is interpolated between keyframes. Every segment (keyframe → next keyframe) has its own
+        easing: the <b>Interpolation</b> dropdown edits the segment under the playhead, and the timeline shows each segment's easing.
       </div>
     </div>
 
@@ -466,6 +468,10 @@ let edges = new Set();
 // Keyframes: Map<frameIndex, Float32Array>  — positions of all verts at that frame
 // Format: [v0x, v0y, v1x, v1y, ...]
 let keyframes = new Map();
+// Easing per segment: keyEasing.get(k) applies from keyframe k to the next one.
+// Keyframes without an entry (or before any keyframe exists) use defaultEasing.
+let keyEasing = new Map();
+let defaultEasing = 'ease-inout';
 
 let totalFrames = 24;
 let currentFrame = 0;
@@ -492,6 +498,7 @@ function snapshotState(){
     tris:         tris.map(t=>[...t]),
     edges:        new Set(edges),
     keyframes:    new Map([...keyframes].map(([f,a])=>[f,new Float32Array(a)])),
+    keyEasing:    new Map(keyEasing),
     currentFrame: currentFrame,
   };
 }
@@ -506,6 +513,7 @@ function applySnapshot(snap){
   tris         = snap.tris.map(t=>[...t]);
   edges        = new Set(snap.edges);
   keyframes    = new Map([...snap.keyframes].map(([f,a])=>[f,new Float32Array(a)]));
+  keyEasing    = new Map(snap.keyEasing);
   currentFrame = snap.currentFrame;
   interpolateFrame(currentFrame);
 }
@@ -809,7 +817,7 @@ function autoMeshGrid(){
     const x=spriteW*c/cols, y=spriteH*r/rows;
     verts.push({x,y,ox:x,oy:y});
   }
-  keyframes.clear(); currentFrame=0;
+  keyframes.clear(); keyEasing.clear(); currentFrame=0;
   triangulate();
   hint(`Grid mesh: ${verts.length} vertices (${cols}×${rows})`);
 }
@@ -828,7 +836,7 @@ function autoMeshAlpha(){
   verts=[];
   for(const [x,y] of simplified) verts.push({x,y,ox:x,oy:y});
   for(const [x,y] of inner)      verts.push({x,y,ox:x,oy:y});
-  keyframes.clear(); currentFrame=0;
+  keyframes.clear(); keyEasing.clear(); currentFrame=0;
   triangulate();
   hint(`Alpha mesh: ${verts.length} vertices, ${tris.length} triangles`);
 }
@@ -896,7 +904,7 @@ function resetDeform(){
 
 // ── Clear ─────────────────────────────────────────────────────
 function clearMesh(){
-  verts=[];tris=[];edges=new Set();keyframes=new Map();selIdx.clear();hovIdx=-1;currentFrame=0;
+  verts=[];tris=[];edges=new Set();keyframes=new Map();keyEasing=new Map();selIdx.clear();hovIdx=-1;currentFrame=0;
   render();updateUI();renderTimeline();
 }
 function clearAll(){
@@ -930,6 +938,8 @@ function _commitKeyframe(){
   if(!verts.length) return;
   const pos=new Float32Array(verts.length*2);
   for(let i=0;i<verts.length;i++){pos[i*2]=verts[i].x;pos[i*2+1]=verts[i].y;}
+  // a new keyframe splits a segment: both halves keep that segment's easing
+  if(!keyframes.has(currentFrame)) keyEasing.set(currentFrame, easingOfSegmentAt(currentFrame));
   keyframes.set(currentFrame,pos);
   renderTimeline(); updateUI();
 }
@@ -946,12 +956,40 @@ function removeKeyframe(){
   if(!keyframes.has(currentFrame)) return;
   pushUndo();
   keyframes.delete(currentFrame);
+  keyEasing.delete(currentFrame);
+  interpolateFrame(currentFrame); render();
   renderTimeline(); updateUI();
   hint(`Keyframe removed from frame ${currentFrame}`);
 }
 
 // Get sorted keyframe list
 function sortedKeys(){ return [...keyframes.keys()].sort((a,b)=>a-b); }
+
+// Keyframe that starts the segment containing frame f (largest key <= f), or null
+function segmentStartAt(f){ let k0=null; for(const k of sortedKeys()) if(k<=f) k0=k; return k0; }
+function easingOfSegmentAt(f){ const k0=segmentStartAt(f); return k0===null ? defaultEasing : (keyEasing.get(k0)||defaultEasing); }
+
+// Easing dropdown → the segment under the playhead (or the default when there's none)
+function setSegmentEasing(type){
+  const k0=segmentStartAt(currentFrame);
+  if(k0===null){ defaultEasing=type; hint(`Default easing for new keyframes: ${type}`); }
+  else{
+    pushUndo();
+    keyEasing.set(k0,type);
+    const next=sortedKeys().find(k=>k>k0);
+    hint(next===undefined ? `Easing ${type} from keyframe ${k0} (add a later keyframe to use it)` : `Easing ${type}: frames ${k0} → ${next}`);
+  }
+  interpolateFrame(currentFrame); render(); renderTimeline(); updateUI();
+}
+function syncEasingUI(){
+  const sel=document.getElementById('sel-easing'), lbl=document.getElementById('easing-target');
+  if(!sel||!lbl) return;
+  const k0=segmentStartAt(currentFrame);
+  sel.value=easingOfSegmentAt(currentFrame);
+  if(k0===null){ lbl.textContent='Default for new keyframes'; return; }
+  const next=sortedKeys().find(k=>k>k0);
+  lbl.textContent = next===undefined ? `From keyframe ${k0} (last keyframe)` : `Segment: frames ${k0} → ${next}`;
+}
 
 // Easing functions
 function applyEasing(t, type){
@@ -978,45 +1016,9 @@ function applyEasing(t, type){
 
 // Interpolate all vertex positions at frame f
 function interpolateFrame(f){
-  if(!verts.length||!keyframes.size) return;
-  const keys=sortedKeys();
-  const easing=document.getElementById('sel-easing').value;
-
-  // Find surrounding keyframes
-  let k0=null,k1=null;
-  for(const k of keys){ if(k<=f) k0=k; }
-  for(const k of [...keys].reverse()){ if(k>=f) k1=k; }
-
-  if(k0===null&&k1===null) return;
-
-  if(k0===null){
-    // Before first keyframe: use first
-    const pos=keyframes.get(k1);
-    for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}
-    return;
-  }
-  if(k1===null){
-    // After last keyframe: use last
-    const pos=keyframes.get(k0);
-    for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}
-    return;
-  }
-  if(k0===k1){
-    const pos=keyframes.get(k0);
-    for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}
-    return;
-  }
-
-  // Lerp between k0 and k1
-  const rawT=(f-k0)/(k1-k0);
-  const t=applyEasing(rawT,easing);
-  const p0=keyframes.get(k0),p1=keyframes.get(k1);
-  for(let i=0;i<verts.length;i++){
-    verts[i].x=lerp(p0[i*2],p1[i*2],t);
-    verts[i].y=lerp(p0[i*2+1],p1[i*2+1],t);
-  }
+  if(!verts.length) return;
+  interpolateFrameDirect(f);
 }
-
 // ── Frame navigation ──────────────────────────────────────────
 function goToFrame(f){
   // If we're in deform mode and on a keyframe, save current positions first
@@ -1298,7 +1300,17 @@ function renderTimeline(){
     }
     tc.stroke();
     tc.setLineDash([]);
+    // easing of each segment, where there's room for it
+    const ABBR={'linear':'lin','ease-in':'in','ease-out':'out','ease-inout':'in-out','bounce':'bounce','elastic':'elastic','step':'step'};
+    tc.font='9px monospace'; tc.textAlign='center'; tc.fillStyle='rgba(232,144,10,0.75)';
+    for(let i=0;i<keys.length-1;i++){
+      const xa=keys[i]*TL_CELL+TL_CELL/2, xb=keys[i+1]*TL_CELL+TL_CELL/2;
+      const label=ABBR[keyEasing.get(keys[i])||defaultEasing]||'';
+      if(xb-xa>tc.measureText(label).width+14) tc.fillText(label,(xa+xb)/2,20+TL_ROW/2-3);
+    }
+    tc.textAlign='left';
   }
+  syncEasingUI();
 
   // Playhead
   tc.fillStyle='rgba(232,144,10,0.85)';
@@ -1342,7 +1354,6 @@ async function runExport(){
   const scale  = parseFloat(document.getElementById('sel-scale').value)||1;
   const drawMesh=opts.exportMesh;
   const W=Math.round(spriteW*scale), H=Math.round(spriteH*scale);
-  const easing = document.getElementById('sel-easing').value;
 
   // Output canvas (scaled) + sprite-res ImageData buffer for pixel-perfect warp
   const oc     = document.createElement('canvas'); oc.width=W; oc.height=H;
@@ -1357,7 +1368,7 @@ async function runExport(){
   // Snapshot current keyframes so export doesn't mutate state
   for(let f=0;f<totalFrames;f++){
     // interpolate positions
-    interpolateFrameDirect(f, easing);
+    interpolateFrameDirect(f);
 
     // Pixel-perfect raster — identical algorithm to viewport renderWarpedSprite
     const SW=spriteW, SH=spriteH;
@@ -1437,7 +1448,8 @@ async function runExport(){
 }
 
 // Interpolate without mutating currentFrame or re-rendering
-function interpolateFrameDirect(f, easing){
+// Pose the mesh at frame f (no re-render). Each segment uses its own easing.
+function interpolateFrameDirect(f){
   if(!keyframes.size) return;
   const keys=sortedKeys();
   let k0=null,k1=null;
@@ -1447,7 +1459,7 @@ function interpolateFrameDirect(f, easing){
   if(k0===null){const pos=keyframes.get(k1);for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}return;}
   if(k1===null){const pos=keyframes.get(k0);for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}return;}
   if(k0===k1){const pos=keyframes.get(k0);for(let i=0;i<verts.length;i++){verts[i].x=pos[i*2];verts[i].y=pos[i*2+1];}return;}
-  const rawT=(f-k0)/(k1-k0), t=applyEasing(rawT,easing);
+  const rawT=(f-k0)/(k1-k0), t=applyEasing(rawT,keyEasing.get(k0)||defaultEasing);
   const p0=keyframes.get(k0),p1=keyframes.get(k1);
   for(let i=0;i<verts.length;i++){verts[i].x=lerp(p0[i*2],p1[i*2],t);verts[i].y=lerp(p0[i*2+1],p1[i*2+1],t);}
 }

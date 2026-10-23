@@ -254,13 +254,14 @@ label{color:var(--dim);font-size:13px;}
       <button id="btn-upd-anim">Update</button>
       <div style="border-top:1px solid var(--border);margin:2px -8px;padding:4px 8px 0;">
         <div style="font-size:10px;color:var(--accent);margin-bottom:4px;">EASING</div>
-        <select id="ease" style="width:100%">
+        <select id="ease" style="width:100%" title="Easing of the selected keyframes, or of the selected bone's segment under the playhead">
           <option value="linear">Linear</option>
           <option value="easeInOut" selected>Ease In-Out</option>
           <option value="easeIn">Ease In</option>
           <option value="easeOut">Ease Out</option>
           <option value="step">Step</option>
         </select>
+        <div id="ease-target" style="font-size:9px;color:var(--dim);margin-top:3px"></div>
       </div>
     </div>
   </div>
@@ -371,6 +372,7 @@ label{color:var(--dim);font-size:13px;}
         <li><kbd>+ Key</kbd> — Add keyframe for selected bone at current frame</li>
         <li><kbd>+ Pose</kbd> — Add keyframes for ALL bones at current frame</li>
         <li><kbd>− Key</kbd> — Delete keyframe for selected bone at current frame</li>
+        <li><b>Easing</b> — every segment between two keyframes has its own curve: select keyframes on the timeline (or put the playhead inside a segment of the selected bone) and pick it in the Easing list</li>
         <li><b>TL Zoom slider</b> — Zoom the timeline horizontally</li>
       </ul>
 
@@ -520,7 +522,34 @@ const EASE={
   easeInOut:t=>t<.5?2*t*t:-1+(4-2*t)*t,
   step:     t=>t>=1?1:0,
 };
-const getEase=()=>EASE[document.getElementById('ease').value]||EASE.linear;
+// Easing is per segment: keyframe.ease applies from that key to the bone's next
+// key. Keys without one (e.g. from older projects) use S.defaultEase.
+S.defaultEase='easeInOut';
+const easeName=kf=>(kf&&kf.ease)||S.defaultEase;
+const boneKeys=(boneId)=>S.anim?S.anim.keyframes.filter(k=>k.boneId===boneId).sort((a,b)=>a.frame-b.frame):[];
+// key that starts the bone's segment containing `frame` (last key <= frame), or null
+const segmentKeyAt=(boneId,frame)=>{let k0=null;for(const k of boneKeys(boneId))if(k.frame<=frame)k0=k;return k0;};
+// a new key splits a segment: both halves keep that segment's easing
+const easeForNewKey=(boneId,frame)=>easeName(segmentKeyAt(boneId,frame));
+
+// What the easing dropdown edits: the keys selected on the timeline, else the
+// selected bone's segment under the playhead
+function easeTargets(){
+  if(!S.anim)return[];
+  if(S.selKeys.length) return S.selKeys.map(sk=>S.anim.keyframes.find(k=>k.boneId===sk.boneId&&k.frame===sk.frame)).filter(Boolean);
+  const k0=S.selBone!=null?segmentKeyAt(S.selBone,S.frame):null;
+  return k0?[k0]:[];
+}
+function syncEaseUI(){
+  const sel=$('#ease'), lbl=$('#ease-target');
+  if(!sel||!lbl)return;
+  const t=easeTargets();
+  if(!t.length){ sel.value=S.defaultEase; lbl.textContent='Default for new keyframes'; return; }
+  sel.value=easeName(t[0]);
+  if(S.selKeys.length){ lbl.textContent=`${t.length} selected keyframe${t.length>1?'s':''}`; return; }
+  const next=boneKeys(t[0].boneId).find(k=>k.frame>t[0].frame);
+  lbl.textContent=`${getBone(t[0].boneId)?.name??''}: ${next?`frames ${t[0].frame} → ${next.frame}`:`from frame ${t[0].frame} (last key)`}`;
+}
 
 // -- HELPERS -------------------------------------
 const $=s=>document.querySelector(s);
@@ -687,14 +716,13 @@ function interpBone(id,frame){
   if(!S.anim)return base;
   const keys=S.anim.keyframes.filter(k=>k.boneId===id).sort((a,b2)=>a.frame-b2.frame);
   if(!keys.length)return base;
-  const ease=getEase();
   let prev=null,next=null;
   for(const k of keys){if(k.frame<=frame)prev=k;}
   for(const k of keys){if(k.frame>=frame&&!next)next=k;}
   if(!prev&&next)return{angle:next.angle,x:next.x,y:next.y};
   if(prev&&!next)return{angle:prev.angle,x:prev.x,y:prev.y};
   if(prev===next)return{angle:prev.angle,x:prev.x,y:prev.y};
-  const t=ease((frame-prev.frame)/(next.frame-prev.frame));
+  const t=(EASE[easeName(prev)]||EASE.linear)((frame-prev.frame)/(next.frame-prev.frame));
   return{angle:lerpAng(prev.angle,next.angle,t),x:lerp(prev.x,next.x,t),y:lerp(prev.y,next.y,t)};
 }
 
@@ -705,7 +733,7 @@ function setInterp(prop,val){
   const b=getBone(S.selBone);if(!b)return;
   if(S.anim){
     let kf=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
-    if(!kf){const cur=interpBone(b.id,S.frame);kf={frame:S.frame,boneId:b.id,...cur};S.anim.keyframes.push(kf);}
+    if(!kf){const cur=interpBone(b.id,S.frame);kf={frame:S.frame,boneId:b.id,...cur,ease:easeForNewKey(b.id,S.frame)};S.anim.keyframes.push(kf);}
     kf[prop]=val;
   }else{b[prop]=val;}
   renderVP();renderTL();
@@ -1365,6 +1393,7 @@ async function saveProject(){
     bones:S.bones.map(b=>({...b})),
     anims:S.anims.map(a=>({...a,keyframes:[...a.keyframes]})),
     currentAnimId:S.anim?.id??null,
+    defaultEase:S.defaultEase,
   };
   const blob=new Blob([JSON.stringify(proj,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
@@ -1394,6 +1423,7 @@ async function loadProject(file){
   S.anims=proj.anims;
   S.anim=S.anims.find(a=>a.id===proj.currentAnimId)??S.anims[0]??null;
   S.frame=0;S.selBone=null;S.drag=null;S.ikDrag=null;S.boneDraft=null;
+  S.defaultEase=EASE[proj.defaultEase]?proj.defaultEase:'easeInOut'; // older projects: keys without ease use this
 
   syncAnimCfg();
   renderSpriteList();renderBoneTree();renderProps();renderZOrder();renderAnimList();renderTL();renderVP();
@@ -1466,7 +1496,17 @@ function renderTL(){
         tlX.strokeRect(sx-kw,sy-kw,kw*2,kw*2);
       }
     });
+    // easing of each segment, where there's room for it
+    const ks=anim.keyframes.filter(k=>k.boneId===bone.id).sort((a,b)=>a.frame-b.frame);
+    const ABBR={linear:'lin',easeIn:'in',easeOut:'out',easeInOut:'in-out',step:'step'};
+    tlX.font='8px monospace';tlX.textAlign='center';tlX.fillStyle='#8a8070';
+    for(let i=0;i<ks.length-1;i++){
+      const xa=ks[i].frame*CELL+CELL/2, xb=ks[i+1].frame*CELL+CELL/2, label=ABBR[easeName(ks[i])]||'';
+      if(xb-xa>tlX.measureText(label).width+14) tlX.fillText(label,(xa+xb)/2,ry+ROW/2+3);
+    }
+    tlX.textAlign='left';
   });
+  syncEaseUI();
   // labels
   const labWrap=$('#tl-names-inner');labWrap.innerHTML='';
   S.bones.forEach(bone=>{
@@ -1862,6 +1902,14 @@ document.addEventListener('keydown',e=>{
 });
 
 // -- BUTTONS -------------------------------------
+$('#ease').onchange=e=>{
+  const v=e.target.value, t=easeTargets();
+  if(t.length){ pushUndo(); easeTargets().forEach(k=>{k.ease=v;}); setstatus(`Easing ${v} on ${t.length} keyframe${t.length>1?'s':''}`); }
+  else { S.defaultEase=v; setstatus(`Default easing for new keyframes: ${v}`); }
+  e.target.blur();
+  renderVP();renderTL();renderProps();
+};
+
 $('#btn-save').onclick=saveProject;
 $('#btn-load').onclick=()=>$('#file-proj').click();
 $('#file-proj').onchange=e=>{if(e.target.files[0])loadProject(e.target.files[0]);e.target.value='';};
@@ -1897,7 +1945,7 @@ $('#btn-addkey').onclick=()=>{
   const b=getBone(S.selBone),cur=interpBone(b.id,S.frame);
   const ex=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
   if(ex){ex.angle=cur.angle;ex.x=cur.x;ex.y=cur.y;}
-  else S.anim.keyframes.push({frame:S.frame,boneId:b.id,...cur});
+  else S.anim.keyframes.push({frame:S.frame,boneId:b.id,...cur,ease:easeForNewKey(b.id,S.frame)});
   renderTL();setstatus(`Key saved: ${b.name} @ frame ${S.frame}`);
 };
 $('#btn-addpose').onclick=()=>{
@@ -1907,7 +1955,7 @@ $('#btn-addpose').onclick=()=>{
     const cur=interpBone(b.id,S.frame);
     const ex=S.anim.keyframes.find(k=>k.boneId===b.id&&k.frame===S.frame);
     if(ex){ex.angle=cur.angle;ex.x=cur.x;ex.y=cur.y;}
-    else S.anim.keyframes.push({frame:S.frame,boneId:b.id,...cur});
+    else S.anim.keyframes.push({frame:S.frame,boneId:b.id,...cur,ease:easeForNewKey(b.id,S.frame)});
   });
   renderTL();setstatus(`Pose baked for all bones @ frame ${S.frame}`);
 };

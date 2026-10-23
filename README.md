@@ -92,7 +92,9 @@ Assembles sprites and frames into multi-track animation sequences:
 - Loads ZIPs of PNG frames (e.g. exported from the other Forge tools) as segments
 - 4-track timeline (segments per track) for compositing layered animations, with per-segment start frame, blend mode and opacity
 - Frame trimming (delete selected frames or the last N)
+- Drag segments with the mouse to change their start frame or move them to another track
 - Playback controls (play/pause, rewind, loop) with configurable FPS, zoomable timeline and preview
+- Undo/redo, and project save/load as JSON (frames embedded)
 - Export of the composited animation as a ZIP of PNG frames, with optional nearest-neighbour upscaling
 
 ---
@@ -106,7 +108,7 @@ A 2D skeletal animation tool built for pixel art sprites:
 - Hierarchical bone system (add, reorder, parent/child relationships affecting draw order)
 - Select & rotate tool and Inverse Kinematics (IK) chain dragging
 - Keyframe-based animation with per-bone and "bake all" keyframing
-- Easing curves: linear, ease-in, ease-out, ease-in-out, step
+- Easing per segment (linear, ease-in, ease-out, ease-in-out, step): each pair of keyframes has its own curve, editable for the selected keyframes or the segment under the playhead
 - Onion skinning for animating in context
 - Copy/paste pose between frames
 - Pan/zoom canvas navigation
@@ -124,8 +126,8 @@ Deforms a single sprite over time using a mesh of vertices, instead of frame-by-
 
 - Auto-generate a grid mesh or a mesh from the sprite's alpha channel, or draw one manually on the PNG
 - Add/delete vertices and re-triangulate the mesh
-- Select/Move and Deform tools for posing the mesh per frame
-- Keyframe-based animation with linear, ease-in, ease-out, bounce, and elastic interpolation
+- Select tool edits the mesh itself (rest positions), Deform tool poses it per frame (auto-keyframing)
+- Keyframe-based animation with per-segment easing (linear, ease-in, ease-out, ease-in-out, bounce, elastic, step); the timeline shows each segment's curve
 - Frame-by-frame navigation (first/prev/next/last) plus play/stop preview
 - Undo/redo
 - Export as PNG frame sequence in a ZIP
