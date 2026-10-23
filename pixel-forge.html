@@ -624,6 +624,7 @@ h3{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);
       <tr><td class="k"><kbd>Ctrl+A</kbd></td><td>Select all (active layer)</td></tr>
       <tr><td class="k"><kbd>Ctrl+D</kbd></td><td>Deselect (commits floating selection)</td></tr>
       <tr><td class="k"><kbd>Delete</kbd></td><td>Clear selection contents</td></tr>
+      <tr><td class="k"><kbd>Enter</kbd></td><td>Commit the floating selection (it stays movable until then)</td></tr>
       <tr><td class="k"><kbd>Escape</kbd></td><td>Commit / cancel current selection</td></tr>
     </table>
 
@@ -969,6 +970,11 @@ function selDataCanvas(){
 // Cell pixels are stored as frozen copies; a cell unchanged since its last
 // capture reuses its previous copy, so memory grows only with edited cells.
 let frozenOf=new WeakMap(); // live ImageData -> frozen Uint8ClampedArray
+// Layers get a stable id so undo can tell "same layer" from "re-created layer".
+// Layer properties (name, visibility, opacity, lock) are not undo steps, so
+// restoring a state keeps their CURRENT values for layers that still exist.
+let _layerId=1;
+function ensureLayerIds(){ S.layers.forEach(l=>{ if(l.id==null) l.id=_layerId++; }); }
 
 function sameBytes(a,b){
   if(a.length!==b.length)return false;
@@ -985,6 +991,7 @@ function freezeCell(cell){
   return copy;
 }
 function captureState(){
+  ensureLayerIds();
   return{
     w:S.w,h:S.h,
     layers:S.layers.map(l=>({...l})),
@@ -996,7 +1003,11 @@ function captureState(){
 function restoreState(st){
   const sizeChanged=st.w!==S.w||st.h!==S.h;
   S.w=st.w;S.h=st.h;
-  S.layers=st.layers.map(l=>({...l}));
+  const cur=new Map(S.layers.map(l=>[l.id,l]));
+  S.layers=st.layers.map(l=>{
+    const c=cur.get(l.id); // still exists: keep its current (untracked) properties
+    return c?{...l,name:c.name,visible:c.visible,opacity:c.opacity,locked:c.locked}:{...l};
+  });
   S.frames=st.frames.map(f=>({duration:f.duration,cells:f.cells.map(px=>{
     const cell=new ImageData(new Uint8ClampedArray(px),st.w,st.h);
     frozenOf.set(cell,px);
@@ -1020,7 +1031,8 @@ function sameState(a,b){
     a.frames.length===b.frames.length&&
     a.frames.every((f,i)=>f.duration===b.frames[i].duration&&f.cells.length===b.frames[i].cells.length&&
       f.cells.every((c,j)=>c===b.frames[i].cells[j]))&&
-    JSON.stringify(a.layers)===JSON.stringify(b.layers)&&JSON.stringify(a.tags)===JSON.stringify(b.tags);
+    a.layers.map(l=>l.id).join()===b.layers.map(l=>l.id).join()&& // structure only, see restoreState
+    JSON.stringify(a.tags)===JSON.stringify(b.tags);
 }
 
 // Push the current state as an undo checkpoint (no selection commit).
@@ -1097,7 +1109,7 @@ function addLayer(name){
 
 function dupLayer(){
   const idx=S.activeLayer;
-  const newLayer={...S.layers[idx],name:S.layers[idx].name+' copy'};
+  const newLayer={...S.layers[idx],id:undefined,name:S.layers[idx].name+' copy'}; // new identity
   S.layers.splice(idx+1,0,newLayer);
   S.frames.forEach(f=>{
     const copy=new ImageData(new Uint8ClampedArray(f.cells[idx].data),S.w,S.h);
@@ -1212,6 +1224,7 @@ function delFrame(){
 }
 
 function selectFrame(idx){
+  commitSel(); // a floating selection belongs to the frame it was lifted from
   S.activeFrame=idx; syncImgData(); renderFrameStrip(); renderMain();
 }
 
@@ -2331,6 +2344,7 @@ window.addEventListener('keydown',e=>{
   if(k===']'){ S.brushSize=Math.min(32,S.brushSize+1);$('#brushSize').value=S.brushSize;}
   if(k==='+'||k==='='){ e.preventDefault(); setZoom(S.zoom+1); }
   if(k==='-'){          e.preventDefault(); setZoom(Math.max(1,S.zoom-1)); }
+  if(k==='enter'&&S.sel){ e.preventDefault(); commitSel(); renderMain(); }
   if(k==='escape'){
     commitSel();renderMain();
     if(S.pickMode==='repl'){
@@ -2954,7 +2968,7 @@ function onPaintEnd(e){
   if(S.tool==='rect'){
     S._rubberBand=null;
     if(S.selMoving){
-      S.selMoving=false;commitSel();
+      S.selMoving=false; // stays floating: drag again to move, Enter/click outside commits
     } else if(rectStart){
       const rx=Math.min(rectStart.x,x),ry=Math.min(rectStart.y,y);
       const rw=Math.abs(x-rectStart.x)+1,rh=Math.abs(y-rectStart.y)+1;
@@ -2999,7 +3013,7 @@ function onPaintEnd(e){
   }
 
   if(S.tool==='lasso'){
-    if(S.selMoving){S.selMoving=false;commitSel();renderMain();return;}
+    if(S.selMoving){S.selMoving=false;renderMain();return;}
     if(lassoActive){
       lassoActive=false;
       lassoCombineMode=e.shiftKey?'add':(e.altKey?'sub':null);
@@ -3126,6 +3140,7 @@ $('#btnReplDo').onclick=()=>{
 // ── Color Stats ──────────────────────────────────────────────────────────────
 $('#btnCountColors').onclick=()=>{
   if(!S.imgData)return;
+  commitSel();renderMain();
   const scope=$('#statsScope').value;
   const d=S.imgData.data;
   const w=S.w;
@@ -3442,6 +3457,7 @@ $('#btnExportSpriteSheet').onclick=()=>{
 $('#expCancel').onclick=()=>{ $('#exportModal').style.display='none'; };
 $('#expGo').onclick=async()=>{
   $('#exportModal').style.display='none';
+  commitSel();renderMain();
   const fmt=$('#expFormat').value;
   const cols=+$('#expCols').value||S.frames.length;
   const flatten=$('#expFlatten').checked;
@@ -3789,6 +3805,7 @@ $('#btnOutline').onclick=()=>{
 // ── Crop to content ───────────────────────────────────────────────────────
 $('#btnCropContent').onclick=()=>{
   if(!S.imgData)return;
+  commitSel();
   // find bounding box across ALL visible layers of active frame
   const W=S.w,H=S.h;
   let x0=W,y0=H,x1=0,y1=0;

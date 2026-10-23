@@ -13,8 +13,11 @@ console.log('Pixel Forge — selection move / cut / paste');
 await click(...at(1,1));                         // pencil dot at (1,1)
 await tool('rect');
 await drag(...at(0,0),...at(2,2));               // select 3x3
-await drag(...at(1,1),...at(5,5));               // move selection by +4,+4
-check('pixel moved (1,1)->(5,5)', await a(1,1)===0 && await a(5,5)===255);
+await drag(...at(1,1),...at(5,5));               // move selection by +4,+4 (stays floating)
+check('selection floats after the move', await ev(`!!__T.S.selData`) && await a(1,1)===0);
+await p.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+await p.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+check('Enter commits: pixel moved (1,1)->(5,5)', await a(1,1)===0 && await a(5,5)===255);
 await undoBtn();
 check('undo reverts the move in one step', await a(1,1)===255 && await a(5,5)===0);
 await undoBtn();
