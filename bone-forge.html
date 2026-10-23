@@ -1530,12 +1530,13 @@ $('#tl-canvas').addEventListener('mousedown',e=>{
   renderVP();renderTL();renderProps();
 });
 
-$('#tl-canvas').addEventListener('mousemove',e=>{
+// window-level, so the drag keeps tracking (and ends) even outside the timeline
+window.addEventListener('mousemove',e=>{
   if(!S.tlDrag||!S.anim)return;
   const{cx}=tlCoords(e);
   const deltaFrames=Math.round((cx-S.tlDrag.startCX)/S.tlZoom);
-  if(deltaFrames===0)return;
-  if(!S.tlDrag.undoPushed){pushUndo();S.tlDrag.undoPushed=true;}
+  // delta 0 is applied too, so moving back to the start puts the keys back
+  if(deltaFrames!==0&&!S.tlDrag.undoPushed){pushUndo();S.tlDrag.undoPushed=true;}
   // move all selected keyframes
   S.tlDrag.keys.forEach(({kf,origFrame})=>{
     const nf=clamp(origFrame+deltaFrames,0,S.anim.frameCount-1);
@@ -1548,8 +1549,10 @@ $('#tl-canvas').addEventListener('mousemove',e=>{
   renderTL();
 });
 
-$('#tl-canvas').addEventListener('mouseup',e=>{
+window.addEventListener('mouseup',()=>{
   if(S.tlDrag){
+    // dragged away and back to the start: nothing changed, drop the checkpoint
+    if(S.tlDrag.undoPushed&&S.tlDrag.keys.every(({kf,origFrame})=>kf.frame===origFrame)){undoStack.pop();updateUndoButtons();}
     S.tlDrag=null;
     renderTL();
   }
@@ -1737,7 +1740,9 @@ vpC.addEventListener('mousemove',e=>{
   }
 });
 
-vpC.addEventListener('mouseup',e=>{
+// window-level: releasing the button outside the viewport must still end
+// IK drags, bone drafts, drags and panning (otherwise they stick to the cursor)
+window.addEventListener('mouseup',e=>{
   if(S.ikDrag){S.ikDrag=null;renderTL();return;}
   // -- Confirm bone draft --
   if(S.boneDraft){

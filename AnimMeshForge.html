@@ -629,7 +629,10 @@ function pickVertex(cx,cy){
 // ── Mouse ─────────────────────────────────────────────────────
 canvas.addEventListener('mousemove', onMM);
 canvas.addEventListener('mousedown', onMD);
-canvas.addEventListener('mouseup',   onMU);
+// Drags are tracked and ended at window level, so releasing the button outside
+// the canvas (e.g. over the timeline) ends the drag instead of leaving it stuck
+window.addEventListener('mousemove', e=>{ if(dragging&&e.target!==canvas) onMM(e); });
+window.addEventListener('mouseup',   ()=>{ if(dragging) onMU(); });
 canvas.addEventListener('mouseleave',()=>{ hovIdx=-1; render(); });
 
 function getXY(e){ const r=canvas.getBoundingClientRect(); return {mx:e.clientX-r.left, my:e.clientY-r.top}; }
