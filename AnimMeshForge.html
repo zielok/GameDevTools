@@ -262,6 +262,12 @@ select option{background:var(--panel2)}
           <option value="0.5">0.5× original</option>
         </select>
       </div>
+      <div class="row"><label>Frame</label>
+        <select class="easing-select" id="sel-bounds" style="width:auto;flex:1" title="Frame size of the exported PNGs">
+          <option value="fit" selected>Fit animation</option>
+          <option value="sprite">Sprite size (crop)</option>
+        </select>
+      </div>
       <div class="tog-row" onclick="toggleOpt('exportMesh')"><label>Draw Mesh on PNG</label><div class="tog" id="tog-exportMesh"></div></div>
     </div>
 
@@ -415,7 +421,9 @@ select option{background:var(--panel2)}
       <div class="help-step-body">
         Click <b>Export ZIP</b>. Each frame is rendered to a separate PNG
         (<code>frame_0000.png</code>, <code>frame_0001.png</code>, …) and packed into a ZIP.
-        Scale factor and optional mesh overlay can be set in the Export sidebar section.
+        Scale factor, frame size and optional mesh overlay can be set in the Export sidebar section:
+        <b>Fit animation</b> grows the frames so poses that reach past the sprite's edges are kept (all frames share one size),
+        <b>Sprite size</b> crops every frame to the original sprite.
         The export uses pixel-perfect nearest-neighbour sampling — no blending.
       </div>
     </div>
@@ -654,10 +662,13 @@ function onMM(e){
       const dx=(mx-dragStart.mx)/viewScale, dy=(my-dragStart.my)/viewScale;
       if(!dragStart.undoPushed&&(dx||dy)){ pushUndo(); dragStart.undoPushed=true; } // state before the drag
       for(const s of dragStart.snaps){
-        verts[s.i].x=clamp(s.ox+dx,0,spriteW); verts[s.i].y=clamp(s.oy+dy,0,spriteH);
+        // the deformed pose may extend past the sprite (generous limit against runaway drags)
+        verts[s.i].x=clamp(s.ox+dx,-2*spriteW,3*spriteW); verts[s.i].y=clamp(s.oy+dy,-2*spriteH,3*spriteH);
         if(mode==='select'){
           // Select mode edits the mesh itself: the rest position moves with the vertex
+          // (rest positions are texture coordinates, so they stay inside the sprite)
           verts[s.i].ox=clamp(s.rx+dx,0,spriteW); verts[s.i].oy=clamp(s.ry+dy,0,spriteH);
+          verts[s.i].x=verts[s.i].ox+(s.ox-s.rx); verts[s.i].y=verts[s.i].oy+(s.oy-s.ry);
         }
       }
       render(); return;
@@ -1152,83 +1163,63 @@ function _getSrcPixels(){
   return _srcPixels;
 }
 
-function renderWarpedSprite(){
-  // Ensure output buffer
-  if(!_dstCanvas){ _dstCanvas=document.createElement('canvas'); _dstCtx=_dstCanvas.getContext('2d'); }
-  if(_dstCanvas.width!==spriteW||_dstCanvas.height!==spriteH){
-    _dstCanvas.width=spriteW; _dstCanvas.height=spriteH;
-  }
+// Integer sprite-space rect covering the sprite and every vertex of the current pose
+function poseBounds(){
+  let x0=0,y0=0,x1=spriteW,y1=spriteH;
+  for(const v of verts){ x0=Math.min(x0,Math.floor(v.x)); y0=Math.min(y0,Math.floor(v.y)); x1=Math.max(x1,Math.ceil(v.x)); y1=Math.max(y1,Math.ceil(v.y)); }
+  return {x:x0,y:y0,w:x1-x0,h:y1-y0};
+}
 
-  const src = _getSrcPixels();
-  const dst = _dstCtx.createImageData(spriteW, spriteH);
-  const d   = dst.data;
-  const W   = spriteW, H = spriteH;
-
-  // For each triangle, precompute the inverse affine (dest→src mapping)
-  // and rasterise its bounding box pixel by pixel.
+// Rasterises the deformed sprite into an ImageData covering rect b (sprite space,
+// may extend beyond the sprite). For each output pixel inside a triangle, the
+// barycentric weights in the deformed triangle map it back to the rest triangle,
+// and the exact source pixel is copied (nearest neighbour, no blending).
+function rasterizeWarp(b){
+  const src=_getSrcPixels(), W=spriteW, H=spriteH;
+  const dst=new ImageData(b.w,b.h), d=dst.data;
   for(const[ai,bi,ci] of tris){
     const va=verts[ai], vb=verts[bi], vc=verts[ci];
-
-    // Destination triangle corners (deformed positions)
-    const dx0=va.x, dy0=va.y;
-    const dx1=vb.x, dy1=vb.y;
-    const dx2=vc.x, dy2=vc.y;
-
-    // Source triangle corners (rest positions)
-    const sx0=va.ox, sy0=va.oy;
-    const sx1=vb.ox, sy1=vb.oy;
-    const sx2=vc.ox, sy2=vc.oy;
-
-    // Inverse affine: given a pixel (px,py) in dest-space, find (u,v) in src-space.
-    // We solve the barycentric system for the dest triangle, then reconstruct src.
-    // Barycentric denominator for dest triangle:
-    const denom = (dy1-dy2)*(dx0-dx2) + (dx2-dx1)*(dy0-dy2);
+    const dx0=va.x,dy0=va.y, dx1=vb.x,dy1=vb.y, dx2=vc.x,dy2=vc.y;   // deformed corners
+    const sx0=va.ox,sy0=va.oy, sx1=vb.ox,sy1=vb.oy, sx2=vc.ox,sy2=vc.oy; // rest corners
+    const denom=(dy1-dy2)*(dx0-dx2)+(dx2-dx1)*(dy0-dy2);
     if(Math.abs(denom)<1e-6) continue;
-    const inv = 1/denom;
-
-    // Bounding box of destination triangle, clamped to sprite bounds
-    const minX = Math.max(0,  Math.floor(Math.min(dx0,dx1,dx2)));
-    const maxX = Math.min(W-1, Math.ceil(Math.max(dx0,dx1,dx2)));
-    const minY = Math.max(0,  Math.floor(Math.min(dy0,dy1,dy2)));
-    const maxY = Math.min(H-1, Math.ceil(Math.max(dy0,dy1,dy2)));
-
+    const inv=1/denom;
+    // triangle bounding box, clamped to the output rect
+    const minX=Math.max(b.x, Math.floor(Math.min(dx0,dx1,dx2)));
+    const maxX=Math.min(b.x+b.w-1, Math.ceil(Math.max(dx0,dx1,dx2)));
+    const minY=Math.max(b.y, Math.floor(Math.min(dy0,dy1,dy2)));
+    const maxY=Math.min(b.y+b.h-1, Math.ceil(Math.max(dy0,dy1,dy2)));
     for(let py=minY; py<=maxY; py++){
       for(let px=minX; px<=maxX; px++){
-        // Barycentric coords of pixel centre (px+0.5, py+0.5) in dest triangle
-        const pcx=px+0.5, pcy=py+0.5;
-        const w0 = ((dy1-dy2)*(pcx-dx2) + (dx2-dx1)*(pcy-dy2)) * inv;
-        const w1 = ((dy2-dy0)*(pcx-dx2) + (dx0-dx2)*(pcy-dy2)) * inv;
-        const w2 = 1 - w0 - w1;
-        // Strict interior test — pixel belongs to this triangle only
-        if(w0 < 0 || w1 < 0 || w2 < 0) continue;
-
-        // Map to source position via same barycentric weights
-        const su = w0*sx0 + w1*sx1 + w2*sx2;
-        const sv = w0*sy0 + w1*sy1 + w2*sy2;
-
-        // Nearest-neighbour source pixel (floor: pixel centre px+0.5 → px)
-        const sxi = Math.floor(su);
-        const syi = Math.floor(sv);
+        const pcx=px+0.5, pcy=py+0.5; // pixel centre
+        const w0=((dy1-dy2)*(pcx-dx2)+(dx2-dx1)*(pcy-dy2))*inv;
+        const w1=((dy2-dy0)*(pcx-dx2)+(dx0-dx2)*(pcy-dy2))*inv;
+        const w2=1-w0-w1;
+        if(w0<0||w1<0||w2<0) continue; // strict interior: each pixel belongs to one triangle
+        // nearest source pixel (floor: pixel centre px+0.5 → px)
+        const sxi=Math.floor(w0*sx0+w1*sx1+w2*sx2), syi=Math.floor(w0*sy0+w1*sy1+w2*sy2);
         if(sxi<0||sxi>=W||syi<0||syi>=H) continue;
-
-        // Copy RGBA directly — no blending whatsoever
-        const si = (syi*W + sxi) * 4;
-        const di = (py *W + px ) * 4;
-        d[di  ] = src[si  ];
-        d[di+1] = src[si+1];
-        d[di+2] = src[si+2];
-        d[di+3] = src[si+3];
+        const si=(syi*W+sxi)*4, di=((py-b.y)*b.w+(px-b.x))*4;
+        d[di]=src[si]; d[di+1]=src[si+1]; d[di+2]=src[si+2]; d[di+3]=src[si+3];
       }
     }
   }
+  return dst;
+}
 
-  _dstCtx.putImageData(dst, 0, 0);
+function renderWarpedSprite(){
+  // Output buffer covers the sprite AND the deformed mesh, so poses that reach
+  // past the sprite's edges are not clipped
+  const b=poseBounds();
+  if(!_dstCanvas){ _dstCanvas=document.createElement('canvas'); _dstCtx=_dstCanvas.getContext('2d'); }
+  if(_dstCanvas.width!==b.w||_dstCanvas.height!==b.h){ _dstCanvas.width=b.w; _dstCanvas.height=b.h; }
+  _dstCtx.putImageData(rasterizeWarp(b), 0, 0);
 
   // Blit to main canvas with view transform
   ctx.save();
   ctx.globalAlpha = spriteOpacity;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(_dstCanvas, viewOffX, viewOffY, spriteW*viewScale, spriteH*viewScale);
+  ctx.drawImage(_dstCanvas, viewOffX+b.x*viewScale, viewOffY+b.y*viewScale, b.w*viewScale, b.h*viewScale);
   ctx.restore();
 }
 
@@ -1353,56 +1344,35 @@ function triggerExport(){
 async function runExport(){
   const scale  = parseFloat(document.getElementById('sel-scale').value)||1;
   const drawMesh=opts.exportMesh;
-  const W=Math.round(spriteW*scale), H=Math.round(spriteH*scale);
-
-  // Output canvas (scaled) + sprite-res ImageData buffer for pixel-perfect warp
-  const oc     = document.createElement('canvas'); oc.width=W; oc.height=H;
-  const oc_ctx = oc.getContext('2d'); oc_ctx.imageSmoothingEnabled=false;
-  // Sprite pixels read once for this export run (same data as viewport rasterizer)
-  const src = _getSrcPixels();
-
-  const files=[];
   const savedFrame=currentFrame;
   const savedVerts=verts.map(v=>({...v}));
 
-  // Snapshot current keyframes so export doesn't mutate state
-  for(let f=0;f<totalFrames;f++){
-    // interpolate positions
-    interpolateFrameDirect(f);
-
-    // Pixel-perfect raster — identical algorithm to viewport renderWarpedSprite
-    const SW=spriteW, SH=spriteH;
-    const dst=new ImageData(SW,SH);
-    const d=dst.data;
-    for(const[ai,bi,ci] of tris){
-      const va=verts[ai],vb=verts[bi],vc=verts[ci];
-      const dx0=va.x,dy0=va.y, dx1=vb.x,dy1=vb.y, dx2=vc.x,dy2=vc.y;
-      const sx0=va.ox,sy0=va.oy, sx1=vb.ox,sy1=vb.oy, sx2=vc.ox,sy2=vc.oy;
-      const denom=(dy1-dy2)*(dx0-dx2)+(dx2-dx1)*(dy0-dy2);
-      if(Math.abs(denom)<1e-6) continue;
-      const inv=1/denom;
-      const minX=Math.max(0,Math.floor(Math.min(dx0,dx1,dx2)));
-      const maxX=Math.min(SW-1,Math.ceil(Math.max(dx0,dx1,dx2)));
-      const minY=Math.max(0,Math.floor(Math.min(dy0,dy1,dy2)));
-      const maxY=Math.min(SH-1,Math.ceil(Math.max(dy0,dy1,dy2)));
-      for(let py=minY;py<=maxY;py++){
-        for(let px=minX;px<=maxX;px++){
-          const pcx=px+0.5,pcy=py+0.5;
-          const w0=((dy1-dy2)*(pcx-dx2)+(dx2-dx1)*(pcy-dy2))*inv;
-          const w1=((dy2-dy0)*(pcx-dx2)+(dx0-dx2)*(pcy-dy2))*inv;
-          const w2=1-w0-w1;
-          if(w0<0||w1<0||w2<0) continue;
-          const sxi=Math.floor(w0*sx0+w1*sx1+w2*sx2);
-          const syi=Math.floor(w0*sy0+w1*sy1+w2*sy2);
-          if(sxi<0||sxi>=SW||syi<0||syi>=SH) continue;
-          const si=(syi*SW+sxi)*4, di=(py*SW+px)*4;
-          d[di]=src[si]; d[di+1]=src[si+1]; d[di+2]=src[si+2]; d[di+3]=src[si+3];
-        }
-      }
+  // Frame rect (sprite space): the sprite itself, or — "Fit animation" — grown to
+  // the union of every frame's pose, the same for all frames so they stay aligned
+  let B={x:0,y:0,w:spriteW,h:spriteH};
+  if(document.getElementById('sel-bounds').value==='fit'){
+    let x0=0,y0=0,x1=spriteW,y1=spriteH;
+    for(let f=0;f<totalFrames;f++){
+      interpolateFrameDirect(f);
+      const b=poseBounds();
+      x0=Math.min(x0,b.x); y0=Math.min(y0,b.y); x1=Math.max(x1,b.x+b.w); y1=Math.max(y1,b.y+b.h);
     }
-    // Write sprite-res buffer, then scale to output size
-    const sprBuf=document.createElement('canvas'); sprBuf.width=SW; sprBuf.height=SH;
-    const sprCtx=sprBuf.getContext('2d'); sprCtx.putImageData(dst,0,0);
+    B={x:x0,y:y0,w:x1-x0,h:y1-y0};
+  }
+  const W=Math.round(B.w*scale), H=Math.round(B.h*scale);
+
+  // Output canvas (scaled) + frame-rect buffer for the pixel-perfect warp
+  const oc     = document.createElement('canvas'); oc.width=W; oc.height=H;
+  const oc_ctx = oc.getContext('2d'); oc_ctx.imageSmoothingEnabled=false;
+  const sprBuf = document.createElement('canvas'); sprBuf.width=B.w; sprBuf.height=B.h;
+  const sprCtx = sprBuf.getContext('2d');
+
+  const files=[];
+
+  for(let f=0;f<totalFrames;f++){
+    interpolateFrameDirect(f);
+    // same rasterizer as the viewport
+    sprCtx.putImageData(rasterizeWarp(B),0,0);
     oc_ctx.clearRect(0,0,W,H);
     oc_ctx.imageSmoothingEnabled=false;
     oc_ctx.drawImage(sprBuf,0,0,W,H);
@@ -1410,6 +1380,7 @@ async function runExport(){
     if(drawMesh){
       oc_ctx.save();
       oc_ctx.scale(scale,scale);
+      oc_ctx.translate(-B.x,-B.y);
       oc_ctx.strokeStyle='rgba(232,144,10,0.6)'; oc_ctx.lineWidth=0.5;
       for(const[a,b,c] of tris){
         oc_ctx.beginPath(); oc_ctx.moveTo(verts[a].x,verts[a].y); oc_ctx.lineTo(verts[b].x,verts[b].y); oc_ctx.lineTo(verts[c].x,verts[c].y); oc_ctx.closePath(); oc_ctx.stroke();
@@ -1442,7 +1413,7 @@ async function runExport(){
   await new Promise(r=>setTimeout(r,10));
   exportZIPBuffer=buildZip(files);
 
-  document.getElementById('exp-status').textContent=`Done — ${totalFrames} frames, ${(exportZIPBuffer.byteLength/1024).toFixed(1)} KB`;
+  document.getElementById('exp-status').textContent=`Done — ${totalFrames} frames of ${W}×${H} px, ${(exportZIPBuffer.byteLength/1024).toFixed(1)} KB`;
   document.getElementById('exp-close').disabled=false;
   document.getElementById('exp-download').disabled=false;
 }

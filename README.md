@@ -105,7 +105,7 @@ Assembles sprites and frames into multi-track animation sequences:
 
 A 2D skeletal animation tool built for pixel art sprites:
 
-- Hierarchical bone system (add, reorder, parent/child relationships affecting draw order)
+- Hierarchical bone system (add, reorder, parent/child relationships affecting draw order); re-parenting by drag & drop keeps the bone in place, and bones can be detached again
 - Select & rotate tool and Inverse Kinematics (IK) chain dragging
 - Keyframe-based animation with per-bone and "bake all" keyframing
 - Easing per segment (linear, ease-in, ease-out, ease-in-out, step): each pair of keyframes has its own curve, editable for the selected keyframes or the segment under the playhead
@@ -130,6 +130,7 @@ Deforms a single sprite over time using a mesh of vertices, instead of frame-by-
 - Keyframe-based animation with per-segment easing (linear, ease-in, ease-out, ease-in-out, bounce, elastic, step); the timeline shows each segment's curve
 - Frame-by-frame navigation (first/prev/next/last) plus play/stop preview
 - Undo/redo
+- Poses may reach past the sprite's edges; export frames can fit the whole animation (shared size, nothing clipped) or be cropped to the sprite
 - Export as PNG frame sequence in a ZIP
 
 ---
